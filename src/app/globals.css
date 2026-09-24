@@ -146,17 +146,6 @@ button {
   touch-action: manipulation;
   display: block;
 }
-.hint {
-  position: absolute;
-  left: 6px;
-  bottom: 6px;
-  line-height: 1.2;
-  font-size: 12px;
-  color: #e6e0f5;
-  background: rgba(27, 21, 40, 0.75);
-  padding: 2px 6px;
-  pointer-events: none;
-}
 
 .tabs {
   display: grid;
@@ -777,10 +766,38 @@ button {
 
 /* 손님 안내 · 수집가 설명 */
 .help {
-  background: var(--panel-2);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 0;
+}
+.help .help-row {
+  background: var(--panel);
   border: 2px solid var(--line);
-  padding: 10px 12px;
-  margin: 0 0 16px;
+  padding: 8px 10px;
+  margin: 0;
+}
+.help .help-row.active {
+  border-color: var(--gold);
+  background: #4d3f2a;
+  animation: helppulse 1s steps(2) infinite;
+}
+@keyframes helppulse {
+  50% {
+    box-shadow: 0 0 0 2px #ffd23f80;
+  }
+}
+.help .live {
+  display: block;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--gold);
+  margin-top: 2px;
+}
+@media (max-width: 560px) {
+  .help {
+    grid-template-columns: 1fr;
+  }
 }
 .help h3 {
   margin: 0 0 8px;

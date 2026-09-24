@@ -180,7 +180,7 @@ export function maxAffordable(s: GameState, i: number, gold = s.gold): number {
   return k;
 }
 
-export type BuyMode = 1 | 10 | 100 | "max";
+export type BuyMode = 1 | 5 | 10 | 100 | "max";
 
 export function resolveBuy(s: GameState, i: number, mode: BuyMode): { n: number; cost: number } {
   if (mode === "max") {
