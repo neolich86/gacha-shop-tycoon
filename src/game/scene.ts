@@ -225,7 +225,13 @@ const FIGHTER_HI = scale2x(FIGHTER);
 
 const FIG_COLORS = ["#e85d5d", "#4f8fe6", "#5cc27a", "#f2b84b", "#9b6ee8", "#ef7fb4", "#4cc4c4", "#ff914d"];
 
+// 카메라 (보여줄 영역, 논리 좌표)
+const FULL_CAM = { x: 0, y: 0, w: W, h: H };
+const COMPACT_CAM = { x: 44, y: 0, w: 232, h: 200 }; // 좌우 끝 모서리를 잘라 약 1.4배 확대
+
 export class Scene {
+  private cam = FULL_CAM;
+  private compact = false;
   private c: Ctx;
   private view: SceneView = { own: [], staff: [], income: 0, collector: false };
   private customers: Customer[] = [];
@@ -243,6 +249,7 @@ export class Scene {
   ) {
     canvas.width = W * R;
     canvas.height = H * R;
+    canvas.style.aspectRatio = `${W} / ${H}`;
     const c = canvas.getContext("2d");
     if (!c) throw new Error("canvas 2d unsupported");
     this.c = c;
@@ -440,36 +447,51 @@ export class Scene {
   // ───────────────────────── 입력
   private onPointer = (e: PointerEvent) => {
     const r = this.canvas.getBoundingClientRect();
-    const mx = ((e.clientX - r.left) / r.width) * W;
-    const my = ((e.clientY - r.top) / r.height) * H;
-    const sorted = [...this.customers].sort((a, b) => b.x + b.y - (a.x + a.y));
-    for (const cu of sorted) {
-      if (cu.collector && cu.state !== "leave") {
-        const p = sp(cu.x, cu.y);
-        if (mx >= p.x - 10 && mx <= p.x + 10 && my >= p.y - 40 && my <= p.y + 3) {
-          this.cb.onTapCollector();
-          e.preventDefault();
-          return;
-        }
-        continue;
-      }
-      if (cu.bubble <= 0) continue;
+    const v = this.cam;
+    const mx = v.x + ((e.clientX - r.left) / r.width) * v.w;
+    const my = v.y + ((e.clientY - r.top) / r.height) * v.h;
+    // 탭 판정: 말풍선~발끝을 넉넉한 박스로 잡고, 겹치면 손가락에 가장 가까운 손님
+    const padX = this.compact ? 15 : 11;
+    let best: Customer | null = null;
+    let bestD = Infinity;
+    for (const cu of this.customers) {
+      const tappable = cu.collector ? cu.state !== "leave" : cu.bubble > 0;
+      if (!tappable) continue;
       const p = sp(cu.x, cu.y);
-      if (mx >= p.x - 9 && mx <= p.x + 9 && my >= p.y - 34 && my <= p.y + 3) {
-        cu.bubble = 0;
-        const amt = this.cb.onTapCustomer();
-        this.pops.push({ x: p.x, y: p.y - 30, t: 0, kind: "text", text: "+" + this.cb.format(amt), color: "#ffe066" });
-        for (let i = 0; i < 6; i++) this.pops.push({ x: p.x + (i - 2.5) * 4, y: p.y - 20, t: -i * 0.03, kind: "spark" });
-        e.preventDefault();
-        return;
+      if (mx < p.x - padX || mx > p.x + padX || my < p.y - 46 || my > p.y + 5) continue;
+      const d = Math.hypot(mx - p.x, my - (p.y - 22));
+      if (d < bestD) {
+        bestD = d;
+        best = cu;
       }
     }
+    if (!best) return;
+    e.preventDefault();
+    if (best.collector) {
+      this.cb.onTapCollector();
+      return;
+    }
+    const p = sp(best.x, best.y);
+    best.bubble = 0;
+    const amt = this.cb.onTapCustomer();
+    this.pops.push({ x: p.x, y: p.y - 30, t: 0, kind: "text", text: "+" + this.cb.format(amt), color: "#ffe066" });
+    for (let i = 0; i < 6; i++) this.pops.push({ x: p.x + (i - 2.5) * 4, y: p.y - 20, t: -i * 0.03, kind: "spark" });
   };
+
+  /** 모바일: 매장 가장자리를 잘라 확대해서 보여줌 */
+  setCompact(on: boolean) {
+    if (on === this.compact) return;
+    this.compact = on;
+    this.cam = on ? COMPACT_CAM : FULL_CAM;
+    this.canvas.width = this.cam.w * R;
+    this.canvas.height = this.cam.h * R;
+    this.canvas.style.aspectRatio = `${this.cam.w} / ${this.cam.h}`;
+  }
 
   // ───────────────────────── 렌더링
   private draw() {
     const c = this.c;
-    c.setTransform(R, 0, 0, R, 0, 0);
+    c.setTransform(R, 0, 0, R, -this.cam.x * R, -this.cam.y * R);
     c.imageSmoothingEnabled = false;
     rect(c, 0, 0, W, H, "#2b2340");
     // 바깥 배경 점무늬
@@ -548,18 +570,18 @@ export class Scene {
       if (kd % (16 * R) === 0) rect(c, x, b - WALL_H, 1 / R, WALL_H - 4, "#ecdcc4");
     }
     // 창문 (오른쪽 벽 끝쪽)
-    this.wallPatchR(118, 140, 10, 30, "#7d5238");
-    this.wallPatchR(120, 138, 12, 28, "#8fd3f5");
-    this.wallPatchR(120, 138, 20, 21, "#7d5238");
-    this.wallPatchR(128, 129, 12, 28, "#7d5238");
-    this.wallPatchR(121, 124, 22, 27, "#c6ecff");
+    this.wallPatchR(81, 96, 10, 30, "#7d5238");
+    this.wallPatchR(83, 94, 12, 28, "#8fd3f5");
+    this.wallPatchR(83, 94, 20, 21, "#7d5238");
+    this.wallPatchR(88, 89, 12, 28, "#7d5238");
+    this.wallPatchR(84, 87, 22, 27, "#c6ecff");
     // 포스터 (왼쪽 벽)
     this.wallPatchL(10, 24, 14, 32, "#4f8fe6");
     this.wallPatchL(12, 22, 22, 30, "#ffe066");
     this.wallPatchL(14, 20, 16, 20, "#f0f0f0");
-    this.wallPatchL(118, 134, 12, 30, "#ef7fb4");
-    this.wallPatchL(120, 132, 20, 28, "#fff4f8");
-    this.wallPatchL(124, 128, 14, 18, "#9b6ee8");
+    this.wallPatchL(82, 95, 12, 30, "#ef7fb4");
+    this.wallPatchL(84, 93, 20, 28, "#fff4f8");
+    this.wallPatchL(86, 91, 14, 18, "#9b6ee8");
     // 간판
     const sx = OX - 28;
     rect(c, sx - 1, 0, 58, 17, OUTLINE);

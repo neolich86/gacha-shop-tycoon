@@ -49,9 +49,15 @@ export default function GameClient() {
       format: fmt,
     });
     store.attachScene(scene);
+    // 좁은 화면(모바일)에서는 매장을 확대
+    const mq = window.matchMedia("(max-width: 560px)");
+    const applyCompact = () => scene.setCompact(mq.matches);
+    applyCompact();
+    mq.addEventListener("change", applyCompact);
     document.fonts?.load("10px Galmuri9").catch(() => {});
     scene.start();
     return () => {
+      mq.removeEventListener("change", applyCompact);
       scene.stop();
       store.attachScene(null);
     };
