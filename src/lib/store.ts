@@ -11,6 +11,12 @@ import {
   buyStaff,
   computeOffline,
   TAP_SECONDS,
+  openBox,
+  boxCost,
+  makeCollectorOffer,
+  sellToCollector,
+  type GachaResult,
+  type CollectorOffer,
 } from "./economy";
 import { readLocal, writeLocal, clearLocal } from "./save";
 
@@ -19,8 +25,12 @@ const TICK_MS = 100;
 const MIN_OFFLINE_MODAL_SEC = 60;
 
 export interface SceneSink {
-  setView(v: { own: number[]; staff: boolean[]; income: number }): void;
+  setView(v: { own: number[]; staff: boolean[]; income: number; collector: boolean }): void;
 }
+
+const COLLECTOR_STAY_MS = 30_000;
+const COLLECTOR_FIRST_MS = 90_000;
+const COLLECTOR_GAP_MS = [150_000, 210_000];
 
 class GameStore {
   state: GameState | null = null;
@@ -32,6 +42,11 @@ class GameStore {
   private lastSave = 0;
   private paused = false;
   private sink: SceneSink | null = null;
+  gacha: GachaResult[] | null = null;
+  collector: CollectorOffer | null = null;
+  collectorOpen = false;
+  private collectorUntil = 0;
+  private nextCollectorAt = 0;
 
   subscribe = (l: () => void) => {
     this.listeners.add(l);
@@ -67,7 +82,8 @@ class GameStore {
 
   private pushView() {
     const s = this.state;
-    if (s && this.sink) this.sink.setView({ own: s.own, staff: s.staff, income: incomePerSec(s) });
+    if (s && this.sink)
+      this.sink.setView({ own: s.own, staff: s.staff, income: incomePerSec(s), collector: !!this.collector });
   }
 
   attachScene(sink: SceneSink | null) {
@@ -101,6 +117,7 @@ class GameStore {
     if (!this.state) this.init();
     this.lastTick = performance.now();
     this.lastSave = Date.now();
+    this.nextCollectorAt = Date.now() + COLLECTOR_FIRST_MS;
     this.timer = window.setInterval(() => {
       const now = performance.now();
       const dt = Math.min(1, (now - this.lastTick) / 1000);
@@ -109,6 +126,7 @@ class GameStore {
       if (!s || this.paused) return;
       tick(s, dt);
       s.lastSeen = Date.now();
+      this.updateCollector();
       this.pushView();
       if (Date.now() - this.lastSave > SAVE_EVERY_MS) this.save();
       this.emit();
@@ -125,7 +143,75 @@ class GameStore {
     this.save();
   }
 
+  private updateCollector() {
+    const now = Date.now();
+    if (this.collector) {
+      if (!this.collectorOpen && now > this.collectorUntil) {
+        this.collector = null;
+        this.nextCollectorAt = now + this.gap();
+      }
+      return;
+    }
+    if (now < this.nextCollectorAt || !this.state) return;
+    const offer = makeCollectorOffer(this.state);
+    if (!offer) {
+      this.nextCollectorAt = now + 20_000;
+      return;
+    }
+    this.collector = offer;
+    this.collectorUntil = now + COLLECTOR_STAY_MS;
+  }
+
+  private gap() {
+    return COLLECTOR_GAP_MS[0] + Math.random() * (COLLECTOR_GAP_MS[1] - COLLECTOR_GAP_MS[0]);
+  }
+
   // ───── 액션
+  boxCost() {
+    return this.state ? boxCost(this.state) : 0;
+  }
+
+  /** 박스 n개 연속 개봉 (돈이 떨어지면 중단) */
+  openBoxes(n: number): GachaResult[] {
+    const s = this.state;
+    if (!s) return [];
+    const out: GachaResult[] = [];
+    for (let k = 0; k < n; k++) {
+      const r = openBox(s);
+      if (!r) break;
+      out.push(r);
+    }
+    if (out.length) {
+      this.gacha = out;
+      this.pushView();
+      this.save();
+      this.emit();
+    }
+    return out;
+  }
+
+  closeGacha() {
+    this.gacha = null;
+    this.emit();
+  }
+
+  tapCollector() {
+    if (!this.collector) return;
+    this.collectorOpen = true;
+    this.emit();
+  }
+
+  answerCollector(sell: boolean) {
+    const s = this.state;
+    if (s && this.collector && sell) sellToCollector(s, this.collector);
+    this.collector = null;
+    this.collectorOpen = false;
+    this.nextCollectorAt = Date.now() + this.gap();
+    this.pushView();
+    this.save();
+    this.emit();
+  }
+
   buyShelf(i: number, mode: BuyMode) {
     if (this.state && buyShelf(this.state, i, mode)) {
       this.pushView();
@@ -162,6 +248,9 @@ class GameStore {
     clearLocal();
     this.state = newGame();
     this.offline = null;
+    this.gacha = null;
+    this.collector = null;
+    this.collectorOpen = false;
     this.pushView();
     this.save();
     this.emit();

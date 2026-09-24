@@ -1,6 +1,7 @@
 // 2등신 캐릭터 — 고해상도 도트 (20×29칸 + 자동 외곽선, 논리 11×15.5px)
 // 모양을 코드로 조립한 뒤 외곽선을 자동으로 두르고, 외형·방향·프레임별로 캐시한다.
 import { R, shade, type Ctx } from "./pixel";
+import { FIGURES, SERIES, type Accessory } from "@/lib/figures";
 
 export interface Look {
   hair: string;
@@ -10,12 +11,15 @@ export interface Look {
   shoes: string;
   apron?: string;
   hat?: string;
+  acc?: Accessory;
+  accColor?: string;
 }
 
 export const OUTLINE = "#2a1e2e";
 
 const GW = 20; // 내부 칸 너비
-const GH = 29; // 내부 칸 높이
+const TOP = 4; // 귀·뿔·리본이 머리 위로 나올 여백
+const GH = 29 + TOP; // 내부 칸 높이
 const PAD = 1;
 
 type Facing = "front" | "back";
@@ -24,6 +28,7 @@ type Frame = 0 | 1 | 2;
 function buildGrid(look: Look, facing: Facing, frame: Frame): (string | null)[][] {
   const g: (string | null)[][] = Array.from({ length: GH }, () => Array(GW).fill(null));
   const set = (x: number, y: number, col: string) => {
+    y += TOP;
     if (x >= 0 && x < GW && y >= 0 && y < GH) g[y][x] = col;
   };
   const fill = (x0: number, y0: number, x1: number, y1: number, col: string) => {
@@ -115,13 +120,59 @@ function buildGrid(look: Look, facing: Facing, frame: Frame): (string | null)[][
     fill(facing === "front" ? 1 : 3, 5, facing === "front" ? 18 : 16, 5, shade(look.hat, -0.25));
     fill(8, 1, 11, 2, shade(look.hat, 0.35));
   }
+  // ── 시리즈 액세서리 (y가 음수면 머리 위 여백)
+  const ac = look.accColor ?? "#ffd23f";
+  switch (look.acc) {
+    case "ribbon": {
+      // 머리 오른쪽 위 큰 리본
+      fill(12, -2, 13, 1, ac);
+      fill(17, -2, 18, 1, ac);
+      fill(14, -1, 16, 0, ac);
+      fill(14, -3, 16, -3, shade(ac, 0.3));
+      set(15, -1, shade(ac, -0.3));
+      set(15, 0, shade(ac, -0.3));
+      break;
+    }
+    case "helmet": {
+      for (let y = 0; y <= 5; y++) for (let x = 0; x < GW; x++) if (inHead(x, y)) set(x, y, ac);
+      fill(2, 6, 17, 6, shade(ac, -0.3));
+      fill(9, -3, 10, -1, shade(ac, -0.2)); // 안테나
+      fill(9, -4, 10, -4, "#ffe066");
+      fill(6, 1, 8, 1, shade(ac, 0.4));
+      break;
+    }
+    case "band": {
+      for (let x = 0; x < GW; x++) if (inHead(x, 5)) set(x, 5, ac);
+      for (let x = 0; x < GW; x++) if (inHead(x, 6) && facing === "back") set(x, 6, ac);
+      fill(17, 6, 18, 7, ac);
+      fill(18, 8, 19, 9, ac);
+      break;
+    }
+    case "ears": {
+      const ear = (x0: number, dir: 1 | -1) => {
+        for (let k = 0; k < 4; k++) fill(dir > 0 ? x0 : x0 - k, -3 + k, dir > 0 ? x0 + k : x0, -3 + k, look.hair);
+        if (facing === "front") set(dir > 0 ? x0 + 1 : x0 - 1, -1, "#f7a8c0");
+        if (facing === "front") set(dir > 0 ? x0 + 1 : x0 - 1, 0, "#f7a8c0");
+      };
+      ear(2, 1);
+      ear(17, -1);
+      break;
+    }
+    case "horns": {
+      fill(4, -2, 5, 1, ac);
+      fill(3, -3, 4, -2, ac);
+      fill(14, -2, 15, 1, ac);
+      fill(15, -3, 16, -2, ac);
+      break;
+    }
+  }
   return g;
 }
 
 const cache = new Map<string, HTMLCanvasElement>();
 
-function sprite(look: Look, facing: Facing, frame: Frame): HTMLCanvasElement {
-  const key = `${look.hair}${look.skin}${look.shirt}${look.pants}${look.shoes}${look.apron ?? ""}${look.hat ?? ""}|${facing}|${frame}`;
+export function sprite(look: Look, facing: Facing, frame: Frame): HTMLCanvasElement {
+  const key = `${look.hair}${look.skin}${look.shirt}${look.pants}${look.shoes}${look.apron ?? ""}${look.hat ?? ""}${look.acc ?? ""}${look.accColor ?? ""}|${facing}|${frame}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const g = buildGrid(look, facing, frame);
@@ -192,3 +243,22 @@ export const STAFF_LOOKS: Look[] = [
   { hair: "#b35c8a", skin: "#ffd9b8", shirt: "#ef7fb4", pants: "#f0f0f0", shoes: "#b35c8a" },
   { hair: "#5a5a7a", skin: "#f5c49c", shirt: "#1f1b24", pants: "#1f1b24", shoes: "#1f1b24", hat: "#e8c26a" },
 ];
+
+/** 피규어 id → 외형 (시리즈 팔레트 + 등급별 장식 색) */
+export function figureLook(id: number): Look {
+  const f = FIGURES[id];
+  const se = SERIES[f.series];
+  const h = (n: number) => (id * 7919 + n * 104729) % 9973;
+  const pick = <T,>(a: T[], n: number) => a[h(n) % a.length];
+  const accColor =
+    f.rarity === 4 ? "#ffd23f" : f.rarity === 3 ? "#ff6b9a" : se.accessory === "horns" ? "#fff4e0" : se.color;
+  return {
+    hair: pick(se.hairs, 1),
+    skin: se.id === "dragon" && f.index % 3 === 0 ? "#bfeee6" : pick(SKINS, 2),
+    shirt: f.rarity === 4 ? "#ffd23f" : pick(se.outfits, 3),
+    pants: f.rarity >= 3 ? "#2a1e2e" : pick(se.outfits, 4),
+    shoes: "#3a2b2b",
+    acc: se.accessory,
+    accColor,
+  };
+}

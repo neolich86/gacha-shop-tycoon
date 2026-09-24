@@ -73,7 +73,13 @@ interface Customer {
   walkT: number;
   bubble: number; // 남은 말풍선 시간(초), 0이면 없음
   stops: number;
+  collector?: boolean;
 }
+
+const COLLECTOR_LOOK: Look = {
+  hair: "#e8e8f0", skin: "#f5c49c", shirt: "#5a2a7a", pants: "#2a1e2e", shoes: "#1f1b24", hat: "#2a1e2e",
+};
+const COLLECTOR_SPOT: [number, number] = [3.4, 5.4];
 
 interface Pop {
   x: number;
@@ -88,10 +94,12 @@ export interface SceneView {
   own: number[];
   staff: boolean[];
   income: number;
+  collector: boolean;
 }
 
 export interface SceneCallbacks {
   onTapCustomer: () => number; // 지급된 금액을 돌려줌
+  onTapCollector: () => void;
   format: (n: number) => string;
 }
 
@@ -219,7 +227,7 @@ const FIG_COLORS = ["#e85d5d", "#4f8fe6", "#5cc27a", "#f2b84b", "#9b6ee8", "#ef7
 
 export class Scene {
   private c: Ctx;
-  private view: SceneView = { own: [], staff: [], income: 0 };
+  private view: SceneView = { own: [], staff: [], income: 0, collector: false };
   private customers: Customer[] = [];
   private pops: Pop[] = [];
   private t = 0;
@@ -313,6 +321,36 @@ export class Scene {
       if (this.customers.length < this.targetCustomers()) this.spawn();
       this.spawnT = 1.0 + this.rnd() * 2.2;
     }
+    // 수집가 손님
+    const col = this.customers.find((c) => c.collector);
+    if (this.view.collector && !col) {
+      this.customers.push({
+        id: this.nextId++,
+        x: ENTRANCE[0],
+        y: ENTRANCE[1],
+        path: [
+          [CORRIDOR_X, COLLECTOR_SPOT[1]],
+          [COLLECTOR_SPOT[0], COLLECTOR_SPOT[1]],
+        ],
+        state: "walk",
+        after: "browse",
+        timer: 9999,
+        look: COLLECTOR_LOOK,
+        facing: "back",
+        flip: false,
+        walkT: 0,
+        bubble: 0,
+        stops: 99,
+        collector: true,
+      });
+    } else if (col && !this.view.collector && col.state !== "leave") {
+      col.path = [
+        [CORRIDOR_X, col.y],
+        [ENTRANCE[0], ENTRANCE[1]],
+      ];
+      col.state = "leave";
+      col.after = "gone";
+    }
     const speed = 1.9;
     for (const cu of this.customers) {
       if (cu.bubble > 0) cu.bubble = Math.max(0, cu.bubble - dt);
@@ -340,6 +378,8 @@ export class Scene {
           cu.flip = dy > dx;
         }
         cu.walkT += dt;
+      } else if (cu.collector) {
+        cu.facing = "front";
       } else {
         cu.timer -= dt;
         if (cu.timer <= 0) this.nextStep(cu);
@@ -404,6 +444,15 @@ export class Scene {
     const my = ((e.clientY - r.top) / r.height) * H;
     const sorted = [...this.customers].sort((a, b) => b.x + b.y - (a.x + a.y));
     for (const cu of sorted) {
+      if (cu.collector && cu.state !== "leave") {
+        const p = sp(cu.x, cu.y);
+        if (mx >= p.x - 10 && mx <= p.x + 10 && my >= p.y - 40 && my <= p.y + 3) {
+          this.cb.onTapCollector();
+          e.preventDefault();
+          return;
+        }
+        continue;
+      }
       if (cu.bubble <= 0) continue;
       const p = sp(cu.x, cu.y);
       if (mx >= p.x - 9 && mx <= p.x + 9 && my >= p.y - 34 && my <= p.y + 3) {
@@ -786,6 +835,21 @@ export class Scene {
     const frame = moving ? ((Math.floor(cu.walkT * 8) % 2) + 1) as 1 | 2 : 0;
     const bob = moving && frame === 1 ? 1 : 0;
     drawChar(c, cu.look, p.x, p.y - bob, cu.facing, frame, cu.flip);
+    if (cu.collector) {
+      if (cu.state === "leave") return;
+      const pulse = Math.floor(this.t * 3) % 2;
+      const bx = p.x - 7;
+      const by = p.y - 31 - pulse;
+      rect(c, bx - 1, by - 1, 16, 13, OUTLINE);
+      rect(c, bx, by, 14, 11, "#ffd23f");
+      rect(c, bx, by, 14, 1.5, "#fff6b0");
+      rect(c, bx + 5, by + 12, 4, 1, OUTLINE);
+      rect(c, bx + 6, by + 11, 2, 2, "#ffd23f");
+      // 보석 (고가 매입 표시)
+      [2, 5, 7, 5, 3, 1].forEach((w, k) => rect(c, bx + 7 - w / 2, by + 2 + k * 1.5, w, 1.5, k === 0 ? "#bff4ff" : k < 3 ? "#5fd4ff" : "#2f8fd0"));
+      rect(c, bx + 5, by + 3.5, 1, 1, "#ffffff");
+      return;
+    }
     if (cu.state === "browse") {
       // 고민 점점점
       const n = Math.floor(this.t * 3) % 4;

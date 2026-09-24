@@ -1,5 +1,6 @@
 // 가챠샵 타이쿤 — 경제 로직 (순수 함수, 서버·시뮬레이션과 공유)
 // 수치 근거: 기획서 v0.1 §3~§7 / Node 봇 시뮬레이션
+import { FIGURES, FIGURE_COUNT, rollFigure, type Figure } from "./figures";
 
 export interface ShelfDef {
   id: string;
@@ -47,7 +48,7 @@ export const STAFF: StaffDef[] = [
   { id: "ceo", name: "대표", cost: 3e17, mult: 5, desc: "프랜차이즈를 꿈꿔요" },
 ];
 
-// 가챠 등급 (M2에서 사용)
+// 가챠 등급별 장착 보너스 (figures.ts의 Rarity 인덱스와 동일)
 export const RARITIES = [
   { id: "N", weight: 60, bonus: 0.05 },
   { id: "R", weight: 26, bonus: 0.12 },
@@ -56,6 +57,11 @@ export const RARITIES = [
   { id: "UR", weight: 0.5, bonus: 2.0 },
 ] as const;
 export const FIG_SLOTS = 5;
+export const BOX_SECONDS = 30; // 박스 가격 = 초당 매출 × 30초
+export const BOX_MIN_COST = 100;
+export const SELL_SECONDS = [5, 15, 45, 150, 500]; // 중복·약한 피규어 자동 판매가 (초당 매출 × 초)
+export const COLLECTOR_SECONDS = [300, 600, 1200, 3000, 9000]; // 수집가 제안가
+export const SERIES_COMPLETE_MULT = 1.5; // 시리즈 완성 시 그 시리즈 피규어 효과 ×1.5
 
 export const PRESTIGE_DIVISOR = 1e9;
 export const PRESTIGE_BONUS = 0.05;
@@ -70,7 +76,9 @@ export interface GameState {
   prestige: number;
   own: number[];
   staff: boolean[];
-  figs: number[][]; // 진열대별 장착 피규어 등급 인덱스
+  figs: number[][]; // 진열대별 장착 피규어 id
+  dex: number[]; // 피규어 id별 획득 횟수 (도감, 환생해도 유지)
+  boxes: number; // 개봉한 박스 수
   lastSeen: number; // ms
   createdAt: number;
   taps: number;
@@ -86,6 +94,8 @@ export function newGame(now = Date.now()): GameState {
     own: SHELVES.map(() => 0),
     staff: STAFF.map(() => false),
     figs: SHELVES.map(() => []),
+    dex: Array(FIGURE_COUNT).fill(0),
+    boxes: 0,
     lastSeen: now,
     createdAt: now,
     taps: 0,
@@ -107,8 +117,19 @@ export function nextMilestone(count: number): { at: number; mult: number; prev: 
   return null;
 }
 
+export function seriesComplete(s: GameState, series: number): boolean {
+  for (let k = 0; k < 12; k++) if (!s.dex[series * 12 + k]) return false;
+  return true;
+}
+
+/** 피규어 한 개의 장착 효과 (시리즈 완성 보너스 포함) */
+export function figBonus(s: GameState, id: number): number {
+  const f = FIGURES[id];
+  return RARITIES[f.rarity].bonus * (seriesComplete(s, f.series) ? SERIES_COMPLETE_MULT : 1);
+}
+
 export function figMult(s: GameState, i: number): number {
-  return 1 + s.figs[i].reduce((a, r) => a + RARITIES[r].bonus, 0);
+  return 1 + s.figs[i].reduce((a, id) => a + figBonus(s, id), 0);
 }
 
 export function staffMult(s: GameState): number {
@@ -197,6 +218,109 @@ export function tick(s: GameState, dtSec: number): number {
   return g;
 }
 
+// ───────────────────────── 가챠
+
+export function boxCost(s: GameState): number {
+  return Math.max(BOX_MIN_COST, Math.round(incomePerSec(s) * BOX_SECONDS));
+}
+
+export function canOpenBox(s: GameState): boolean {
+  return s.own.some((n) => n > 0);
+}
+
+export interface GachaResult {
+  fig: Figure;
+  isNew: boolean;
+  shelf: number;
+  action: "equip" | "replace" | "sell";
+  replaced?: number; // 밀려난 피규어 id
+  gold: number; // 판매로 받은 금액
+}
+
+export function sellValue(s: GameState, id: number): number {
+  return Math.max(1, Math.round(incomePerSec(s) * SELL_SECONDS[FIGURES[id].rarity]));
+}
+
+/** 박스 1개 개봉 (비용 차감 포함). 돈이 부족하면 null */
+export function openBox(s: GameState, rnd: () => number = Math.random): GachaResult | null {
+  const cost = boxCost(s);
+  if (!canOpenBox(s) || s.gold < cost) return null;
+  s.gold -= cost;
+  s.boxes++;
+  const fig = rollFigure(rnd);
+  const isNew = s.dex[fig.id] === 0;
+  s.dex[fig.id]++;
+  // 매출 증가가 가장 큰 진열대에 자동 장착 (빈 칸 우선, 꽉 찼으면 가장 약한 피규어와 교체)
+  const bonus = figBonus(s, fig.id);
+  let best = -1;
+  let bestGain = 0;
+  let bestSlot = -1;
+  for (let i = 0; i < SHELVES.length; i++) {
+    if (s.own[i] <= 0) continue;
+    const base = shelfIncome(s, i) / figMult(s, i);
+    const slots = s.figs[i];
+    let gain = 0;
+    let slot = -1;
+    if (slots.length < FIG_SLOTS) gain = base * bonus;
+    else {
+      let wi = 0;
+      for (let k = 1; k < slots.length; k++) if (figBonus(s, slots[k]) < figBonus(s, slots[wi])) wi = k;
+      const d = bonus - figBonus(s, slots[wi]);
+      if (d > 0) {
+        gain = base * d;
+        slot = wi;
+      }
+    }
+    if (gain > bestGain) {
+      bestGain = gain;
+      best = i;
+      bestSlot = slot;
+    }
+  }
+  if (best < 0) {
+    const gold = sellValue(s, fig.id);
+    earn(s, gold);
+    const shelf = s.own.findIndex((n) => n > 0);
+    return { fig, isNew, shelf, action: "sell", gold };
+  }
+  if (bestSlot < 0) {
+    s.figs[best].push(fig.id);
+    return { fig, isNew, shelf: best, action: "equip", gold: 0 };
+  }
+  const replaced = s.figs[best][bestSlot];
+  const gold = sellValue(s, replaced);
+  s.figs[best][bestSlot] = fig.id;
+  earn(s, gold);
+  return { fig, isNew, shelf: best, action: "replace", replaced, gold };
+}
+
+// ───────────────────────── 수집가 손님
+
+export interface CollectorOffer {
+  shelf: number;
+  slot: number;
+  figId: number;
+  price: number;
+}
+
+export function makeCollectorOffer(s: GameState, rnd: () => number = Math.random): CollectorOffer | null {
+  const all: { shelf: number; slot: number; figId: number }[] = [];
+  s.figs.forEach((slots, shelf) => slots.forEach((figId, slot) => all.push({ shelf, slot, figId })));
+  if (!all.length) return null;
+  const pick = all[Math.floor(rnd() * all.length)];
+  const price = Math.max(100, Math.round(incomePerSec(s) * COLLECTOR_SECONDS[FIGURES[pick.figId].rarity]));
+  return { ...pick, price };
+}
+
+/** 수집가에게 판매: 제안 당시 위치에 그 피규어가 그대로 있어야 성립 */
+export function sellToCollector(s: GameState, o: CollectorOffer): boolean {
+  const slots = s.figs[o.shelf];
+  if (!slots || slots[o.slot] !== o.figId) return false;
+  slots.splice(o.slot, 1);
+  earn(s, o.price);
+  return true;
+}
+
 export function prestigeGain(s: GameState): number {
   return Math.floor(Math.cbrt(s.runEarned / PRESTIGE_DIVISOR));
 }
@@ -231,9 +355,11 @@ export function loadState(raw: unknown): GameState | null {
     staff: STAFF.map((_, i) => r.staff?.[i] === true),
     figs: SHELVES.map((_, i) =>
       Array.isArray(r.figs?.[i])
-        ? r.figs![i].filter((x) => Number.isInteger(x) && x >= 0 && x < RARITIES.length).slice(0, FIG_SLOTS)
+        ? r.figs![i].filter((x) => Number.isInteger(x) && x >= 0 && x < FIGURE_COUNT).slice(0, FIG_SLOTS)
         : [],
     ),
+    dex: Array.from({ length: FIGURE_COUNT }, (_, k) => Math.floor(num(r.dex?.[k], 0))),
+    boxes: Math.floor(num(r.boxes, 0)),
     lastSeen: num(r.lastSeen, Date.now()),
     taps: Math.floor(num(r.taps, 0)),
   };

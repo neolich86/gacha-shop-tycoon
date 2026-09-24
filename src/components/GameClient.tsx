@@ -17,6 +17,7 @@ import {
 import { fmt, fmtDuration } from "@/lib/format";
 import { store } from "@/lib/store";
 import { Scene } from "@/game/scene";
+import { GachaPanel, GachaResultModal, CollectorModal } from "./GachaPanel";
 
 const SHELF_COLORS = ["#e85d5d", "#6d7fa8", "#d6cab6", "#7fc4d6", "#f2c14e", "#9c2a4f", "#b07a52", "#7fe0ff"];
 
@@ -42,6 +43,7 @@ export default function GameClient() {
     if (!ready || !canvasRef.current) return;
     const scene = new Scene(canvasRef.current, {
       onTapCustomer: () => store.tapCustomer(),
+      onTapCollector: () => store.tapCollector(),
       format: fmt,
     });
     store.attachScene(scene);
@@ -86,7 +88,11 @@ export default function GameClient() {
 
       <div className="stage">
         <canvas ref={canvasRef} className="scene" aria-label="매장 화면. 말풍선이 뜬 손님을 누르면 보너스를 받아요." />
-        <div className="hint">말풍선(!) 손님을 누르면 {TAP_SECONDS}초치 매출 보너스!</div>
+        <div className="hint">
+          {store.collector && !store.collectorOpen
+            ? "★ 수집가 손님이 왔어요! 눌러서 제안을 들어보세요"
+            : `말풍선(!) 손님을 누르면 ${TAP_SECONDS}초치 매출 보너스!`}
+        </div>
       </div>
 
       <nav className="tabs" role="tablist">
@@ -210,12 +216,7 @@ export default function GameClient() {
           </ul>
         )}
 
-        {tab === "gacha" && (
-          <div className="soon">
-            <p>가챠 코너 공사 중</p>
-            <small>다음 업데이트(M2)에서 박스를 뽑아 진열대에 피규어를 장착할 수 있어요.</small>
-          </div>
-        )}
+        {tab === "gacha" && <GachaPanel s={s} />}
 
         {tab === "settings" && (
           <div className="settings">
@@ -251,6 +252,9 @@ export default function GameClient() {
           </div>
         )}
       </section>
+
+      {store.gacha && <GachaResultModal results={store.gacha} />}
+      {store.collectorOpen && store.collector && <CollectorModal s={s} offer={store.collector} />}
 
       {offline && (
         <div className="modal" role="dialog" aria-modal="true">
