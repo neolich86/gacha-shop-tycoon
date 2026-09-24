@@ -8,14 +8,17 @@
     "start": "next start",
     "lint": "eslint",
     "sim": "tsx scripts/sim.ts",
-    "test": "tsx scripts/test-gacha.ts"
+    "test": "tsx scripts/test-gacha.ts && tsx scripts/test-sync.ts && tsx scripts/test-db.ts",
+    "mock": "tsx scripts/mock-supabase.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.1",
     "next": "16.3.6",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

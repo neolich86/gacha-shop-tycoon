@@ -28,3 +28,23 @@ export function clearLocal(): void {
     /* noop */
   }
 }
+
+// 이 기기 세이브의 주인 (카카오 로그인 계정 id). 게스트면 null
+const OWNER_KEY = "gacha-shop-tycoon:owner";
+
+export function readOwner(): string | null {
+  try {
+    return localStorage.getItem(OWNER_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeOwner(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(OWNER_KEY, id);
+    else localStorage.removeItem(OWNER_KEY);
+  } catch {
+    /* noop */
+  }
+}

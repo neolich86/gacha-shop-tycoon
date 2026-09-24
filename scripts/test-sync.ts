@@ -1,0 +1,15 @@
+import { decideSync } from "../src/lib/sync";
+import { newGame } from "../src/lib/economy";
+const assert = (c: boolean, m: string) => { if (!c) { console.error("FAIL", m); process.exit(1); } console.log("ok ", m); };
+const g = (total: number) => { const s = newGame(0); s.totalEarned = total; return s; };
+const U = "u1", V = "u2";
+assert(decideSync(g(0), null, null, U).kind === "uploadLocal", "새 게스트 + 빈 계정 → 그대로 올림");
+assert(decideSync(g(500), null, null, U).kind === "askMigrate", "게스트 진행 + 빈 계정 → 이관 질문");
+assert(decideSync(g(500), null, g(900), U).kind === "askConflict", "게스트 진행 + 계정 데이터 → 선택");
+assert(decideSync(g(0), null, g(900), U).kind === "useCloud", "빈 게스트 + 계정 데이터 → 계정");
+assert(decideSync(g(1000), U, g(900), U).kind === "uploadLocal", "같은 계정, 로컬이 앞섬 → 로컬 올림");
+assert(decideSync(g(800), U, g(900), U).kind === "useCloud", "같은 계정, 클라우드가 앞섬 → 계정");
+assert(decideSync(g(800), U, null, U).kind === "uploadLocal", "같은 계정인데 클라우드 없음 → 올림");
+assert(decideSync(g(99999), V, g(10), U).kind === "useCloud", "다른 계정 기기 데이터는 무시 → 계정");
+assert(decideSync(g(99999), V, null, U).kind === "fresh", "다른 계정 기기 데이터 + 빈 계정 → 새 게임");
+console.log("ALL PASS");

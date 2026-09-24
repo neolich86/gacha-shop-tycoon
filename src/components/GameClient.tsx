@@ -18,10 +18,11 @@ import { fmt, fmtDuration } from "@/lib/format";
 import { store } from "@/lib/store";
 import { Scene } from "@/game/scene";
 import { GachaPanel, GachaResultModal, CollectorModal } from "./GachaPanel";
+import { AccountSection, SyncModal, RankPanel } from "./AccountPanel";
 
 const SHELF_COLORS = ["#e85d5d", "#6d7fa8", "#d6cab6", "#7fc4d6", "#f2c14e", "#9c2a4f", "#b07a52", "#7fe0ff"];
 
-type Tab = "shelves" | "staff" | "gacha" | "settings";
+type Tab = "shelves" | "staff" | "gacha" | "rank" | "settings";
 
 export default function GameClient() {
   const version = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
@@ -67,7 +68,7 @@ export default function GameClient() {
   const onBuyStaff = (i: number) => store.buyStaff(i);
   const claimOffline = () => store.claimOffline();
   const doReset = () => {
-    store.reset();
+    void store.reset();
     setConfirmReset(false);
   };
 
@@ -101,6 +102,7 @@ export default function GameClient() {
             ["shelves", "진열대"],
             ["staff", "직원"],
             ["gacha", "가챠"],
+            ["rank", "랭킹"],
             ["settings", "설정"],
           ] as [Tab, string][]
         ).map(([k, label]) => (
@@ -218,8 +220,11 @@ export default function GameClient() {
 
         {tab === "gacha" && <GachaPanel s={s} />}
 
+        {tab === "rank" && <RankPanel />}
+
         {tab === "settings" && (
           <div className="settings">
+            <AccountSection />
             <dl>
               <dt>누적 매출</dt>
               <dd>{fmt(s.totalEarned)}원</dd>
@@ -231,9 +236,18 @@ export default function GameClient() {
               </dd>
               <dt>저장</dt>
               <dd>
-                이 브라우저에 10초마다 자동 저장돼요. 브라우저를 껐다 켜도 이어서 할 수 있어요.
-                <br />
-                <small className="note">방문 기록 삭제·시크릿 모드·다른 기기에서는 이어지지 않아요. 카카오 로그인 클라우드 저장은 준비 중이에요.</small>
+                {store.account.status === "in" ? (
+                  <>카카오 계정(서버)과 이 브라우저에 함께 저장돼요. 다른 기기에서 로그인해도 이어서 할 수 있어요.</>
+                ) : (
+                  <>
+                    이 브라우저에 10초마다 자동 저장돼요. 브라우저를 껐다 켜도 이어서 할 수 있어요.
+                    <br />
+                    <small className="note">
+                      방문 기록 삭제·시크릿 모드·다른 기기에서는 이어지지 않아요.
+                      {store.account.status !== "off" && " 카카오로 로그인하면 서버에 저장돼요."}
+                    </small>
+                  </>
+                )}
               </dd>
             </dl>
             <section className="help">
@@ -277,6 +291,7 @@ export default function GameClient() {
       </section>
 
       {store.gacha && <GachaResultModal results={store.gacha} />}
+      {store.syncPrompt && <SyncModal p={store.syncPrompt} />}
       {store.collectorOpen && store.collector && <CollectorModal s={s} offer={store.collector} />}
 
       {offline && (

@@ -17,8 +17,47 @@ import {
   sellToCollector,
   type GachaResult,
   type CollectorOffer,
+  loadState,
 } from "./economy";
-import { readLocal, writeLocal, clearLocal } from "./save";
+import { readLocal, writeLocal, clearLocal, readOwner, writeOwner } from "./save";
+import {
+  cloudEnabled,
+  sb,
+  displayName,
+  loadCloud,
+  saveCloud,
+  claimOffline,
+  setNickname,
+  resetCloud,
+  signInKakao,
+  signOut,
+  cloudErrorText,
+  type ServerOffline,
+} from "./cloud";
+import { decideSync } from "./sync";
+import type { User } from "@supabase/supabase-js";
+
+const CLOUD_SAVE_EVERY_MS = 45_000;
+
+export interface Account {
+  status: "off" | "guest" | "syncing" | "in";
+  userId: string | null;
+  nickname: string;
+  lastCloudSave: number;
+  error: string | null;
+}
+
+export interface SyncPrompt {
+  kind: "migrate" | "conflict";
+  local: { total: number; dex: number; boxes: number };
+  cloud: { total: number; dex: number; boxes: number } | null;
+}
+
+const summary = (g: GameState) => ({
+  total: g.totalEarned,
+  dex: g.dex.filter((n) => n > 0).length,
+  boxes: g.boxes,
+});
 
 const SAVE_EVERY_MS = 10_000;
 const TICK_MS = 100;
@@ -49,6 +88,16 @@ class GameStore {
   collectorLeft = 0; // 수집가가 떠나기까지 남은 초
   private nextCollectorAt = 0;
 
+  // 클라우드
+  account: Account = { status: cloudEnabled ? "guest" : "off", userId: null, nickname: "", lastCloudSave: 0, error: null };
+  syncPrompt: SyncPrompt | null = null;
+  private cloudState: GameState | null = null;
+  private cloudReady = false; // 로그인 후 동기화가 끝나 클라우드 저장을 해도 되는 상태
+  private cloudBusy = false;
+  private claiming = false;
+  private awaitingCloud = false; // 로그인 계정 데이터라 오프라인 정산을 서버에 맡김
+  private cloudStarted = false;
+
   subscribe = (l: () => void) => {
     this.listeners.add(l);
     return () => {
@@ -68,7 +117,8 @@ class GameStore {
 
   private init() {
     this.state = readLocal() ?? newGame();
-    this.settleAway();
+    if (cloudEnabled && readOwner()) this.awaitingCloud = true;
+    else this.settleAway();
   }
 
   /** 복귀 정산: 1분 미만 부재는 조용히 지급, 이상이면 모달 */
@@ -105,10 +155,17 @@ class GameStore {
     if (document.visibilityState === "hidden") {
       this.paused = true;
       this.save();
+      void this.cloudSave();
     } else {
-      this.settleAway();
-      this.paused = false;
       this.lastTick = performance.now();
+      if (this.cloudReady) {
+        void this.claimServerOffline().finally(() => {
+          this.paused = false;
+        });
+      } else {
+        this.settleAway();
+        this.paused = false;
+      }
       this.emit();
     }
   };
@@ -130,10 +187,205 @@ class GameStore {
       this.updateCollector();
       this.pushView();
       if (Date.now() - this.lastSave > SAVE_EVERY_MS) this.save();
+      if (this.cloudReady && Date.now() - this.account.lastCloudSave > CLOUD_SAVE_EVERY_MS) void this.cloudSave();
       this.emit();
     }, TICK_MS);
     document.addEventListener("visibilitychange", this.onVisibility);
     window.addEventListener("pagehide", this.save);
+    void this.initCloud();
+  }
+
+  // ───────────────────────── 클라우드
+  private async initCloud() {
+    if (!cloudEnabled || this.cloudStarted) return;
+    this.cloudStarted = true;
+    const c = sb();
+    if (!c) return;
+    c.auth.onAuthStateChange((event, session) => {
+      // 콜백 안에서 바로 supabase 호출을 기다리면 교착될 수 있어 다음 틱으로 미룸
+      if (event === "SIGNED_IN" && session?.user) setTimeout(() => void this.onSignedIn(session.user), 0);
+    });
+    try {
+      const { data } = await c.auth.getSession();
+      if (data.session?.user) await this.onSignedIn(data.session.user);
+      else this.fallbackLocal();
+    } catch {
+      this.fallbackLocal();
+    }
+    // OAuth 콜백 파라미터 정리
+    const u = new URL(window.location.href);
+    if (u.searchParams.has("code") || u.searchParams.has("error")) {
+      u.searchParams.delete("code");
+      u.searchParams.delete("error");
+      u.searchParams.delete("error_description");
+      window.history.replaceState(null, "", u.pathname + u.search + u.hash);
+    }
+  }
+
+  /** 클라우드를 못 쓰는 상황: 로컬 기준으로 오프라인 정산 */
+  private fallbackLocal() {
+    if (this.awaitingCloud) {
+      this.awaitingCloud = false;
+      this.settleAway();
+    }
+    this.emit();
+  }
+
+  private async onSignedIn(user: User) {
+    if (this.account.userId === user.id && this.account.status !== "guest") return;
+    this.account = { ...this.account, status: "syncing", userId: user.id, nickname: displayName(user), error: null };
+    this.emit();
+    try {
+      const row = await loadCloud();
+      const cloud = row ? loadState(row.data) : null;
+      if (row) this.account.nickname = row.nickname;
+      this.cloudState = cloud;
+      const d = decideSync(this.state!, readOwner(), cloud, user.id);
+      if (d.kind === "useCloud") await this.adoptCloud(cloud!);
+      else if (d.kind === "uploadLocal") await this.adoptLocal();
+      else if (d.kind === "fresh") {
+        this.replaceState(newGame());
+        await this.adoptLocal();
+      } else {
+        this.syncPrompt = {
+          kind: d.kind === "askMigrate" ? "migrate" : "conflict",
+          local: summary(this.state!),
+          cloud: cloud ? summary(cloud) : null,
+        };
+        this.account.status = "in";
+      }
+    } catch (e) {
+      this.account.status = "in";
+      this.account.error = cloudErrorText(e) + " 로그인 상태에서 이 기기에만 저장 중이에요.";
+      this.fallbackLocal();
+    }
+    this.emit();
+  }
+
+  private replaceState(g: GameState) {
+    this.state = g;
+    this.gacha = null;
+    this.collector = null;
+    this.collectorOpen = false;
+    writeLocal(g);
+    this.pushView();
+  }
+
+  private applyServerOffline(off: ServerOffline) {
+    const s = this.state;
+    if (!s || off.amount <= 0) return;
+    if (off.elapsed >= MIN_OFFLINE_MODAL_SEC)
+      this.offline = { elapsedSec: off.elapsed, countedSec: off.counted, amount: off.amount };
+    else earn(s, off.amount);
+  }
+
+  private async claimServerOffline() {
+    this.claiming = true;
+    try {
+      this.applyServerOffline(await claimOffline());
+    } catch (e) {
+      this.account.error = cloudErrorText(e);
+      this.settleAway();
+    } finally {
+      this.claiming = false;
+      this.emit();
+    }
+  }
+
+  private async adoptCloud(cloud: GameState) {
+    this.replaceState(cloud);
+    writeOwner(this.account.userId);
+    this.awaitingCloud = false;
+    await this.claimServerOffline();
+    this.cloudReady = true;
+    this.account.status = "in";
+    this.account.lastCloudSave = Date.now() - CLOUD_SAVE_EVERY_MS + 5_000;
+  }
+
+  private async adoptLocal() {
+    writeOwner(this.account.userId);
+    if (this.awaitingCloud) {
+      this.awaitingCloud = false;
+      await this.claimServerOffline(); // 서버 last_seen 기준 정산 후 저장
+    }
+    this.cloudReady = true;
+    this.account.status = "in";
+    await this.cloudSave(true);
+  }
+
+  /** 클라우드 저장 (주기적·이벤트). force면 진행 중 여부만 확인 */
+  async cloudSave(force = false) {
+    if (!this.cloudReady || !this.state || this.cloudBusy || this.claiming) return;
+    if (!force && Date.now() - this.account.lastCloudSave < 3_000) return;
+    this.cloudBusy = true;
+    try {
+      this.state.lastSeen = Date.now();
+      await saveCloud(this.state, this.account.nickname);
+      this.account.error = null;
+    } catch (e) {
+      this.account.error = cloudErrorText(e);
+    } finally {
+      this.account.lastCloudSave = Date.now();
+      this.cloudBusy = false;
+      this.emit();
+    }
+  }
+
+  /** 중요한 변화 뒤 몇 초 안에 클라우드 저장 */
+  private cloudSoon() {
+    if (this.cloudReady) this.account.lastCloudSave = Math.min(this.account.lastCloudSave, Date.now() - CLOUD_SAVE_EVERY_MS + 3_000);
+  }
+
+  async answerSync(choice: "local" | "cloud" | "fresh") {
+    const p = this.syncPrompt;
+    if (!p) return;
+    this.syncPrompt = null;
+    this.account.status = "syncing";
+    this.emit();
+    try {
+      if (choice === "cloud" && this.cloudState) await this.adoptCloud(this.cloudState);
+      else {
+        if (choice === "fresh") this.replaceState(newGame());
+        if (p.kind === "conflict") await resetCloud(); // 계정 데이터를 이 기기 데이터로 교체
+        await this.adoptLocal();
+      }
+    } catch (e) {
+      this.account.status = "in";
+      this.account.error = cloudErrorText(e);
+    }
+    this.emit();
+  }
+
+  async login() {
+    try {
+      await signInKakao();
+    } catch (e) {
+      this.account.error = cloudErrorText(e);
+      this.emit();
+    }
+  }
+
+  async logout() {
+    await this.cloudSave(true);
+    await signOut();
+    clearLocal();
+    writeOwner(null);
+    this.cloudReady = false;
+    this.cloudState = null;
+    this.syncPrompt = null;
+    this.account = { status: "guest", userId: null, nickname: "", lastCloudSave: 0, error: null };
+    this.replaceState(newGame());
+    this.emit();
+  }
+
+  async rename(n: string): Promise<string | null> {
+    try {
+      this.account.nickname = await setNickname(n);
+      this.emit();
+      return null;
+    } catch (e) {
+      return cloudErrorText(e);
+    }
   }
 
   stop() {
@@ -188,6 +440,7 @@ class GameStore {
       this.gacha = out;
       this.pushView();
       this.save();
+      this.cloudSoon();
       this.emit();
     }
     return out;
@@ -212,6 +465,7 @@ class GameStore {
     this.nextCollectorAt = Date.now() + this.gap();
     this.pushView();
     this.save();
+    this.cloudSoon();
     this.emit();
   }
 
@@ -226,6 +480,7 @@ class GameStore {
     if (this.state && buyStaff(this.state, i)) {
       this.pushView();
       this.save();
+      this.cloudSoon();
       this.emit();
     }
   }
@@ -247,15 +502,21 @@ class GameStore {
     this.emit();
   }
 
-  reset() {
+  async reset() {
+    if (this.cloudReady) {
+      try {
+        await resetCloud();
+      } catch (e) {
+        this.account.error = cloudErrorText(e);
+        this.emit();
+        return;
+      }
+    }
     clearLocal();
-    this.state = newGame();
     this.offline = null;
-    this.gacha = null;
-    this.collector = null;
-    this.collectorOpen = false;
-    this.pushView();
+    this.replaceState(newGame());
     this.save();
+    if (this.cloudReady) await this.cloudSave(true);
     this.emit();
   }
 }
