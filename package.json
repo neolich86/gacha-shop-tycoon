@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "sim": "tsx scripts/sim.ts"
+    "sim": "tsx scripts/sim.ts",
+    "test": "tsx scripts/test-gacha.ts"
   },
   "dependencies": {
     "next": "16.3.6",
