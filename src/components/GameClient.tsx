@@ -31,6 +31,7 @@ export default function GameClient() {
   const [tab, setTab] = useState<Tab>("shelves");
   const [mode, setMode] = useState<BuyMode>(1);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [helpOpen, setHelpOpen] = useState<[boolean, boolean]>([false, false]); // 모바일 손님 안내 펼침
 
   // 게임 루프
   useEffect(() => {
@@ -92,25 +93,37 @@ export default function GameClient() {
       </div>
 
       <section className="help" aria-label="손님 안내">
-        <div className="help-row">
+        <div className={`help-row ${helpOpen[0] ? "open" : ""}`}>
           <span className="icon-bang" aria-hidden>
             !
           </span>
           <div>
-            <b>말풍선(!) 손님</b>
-            <p>눌러주면 기분 좋게 지갑을 열어요. 초당 매출 {TAP_SECONDS}초치를 바로 받아요.</p>
+            <button
+              className="help-toggle"
+              aria-expanded={helpOpen[0]}
+              onClick={() => setHelpOpen(([a, b]) => [!a, b])}
+            >
+              말풍선(!) 손님
+            </button>
+            <p className="detail">눌러주면 기분 좋게 지갑을 열어요. 초당 매출 {TAP_SECONDS}초치를 바로 받아요.</p>
           </div>
         </div>
-        <div className={`help-row ${store.collector && !store.collectorOpen ? "active" : ""}`}>
+        <div
+          className={`help-row ${helpOpen[1] ? "open" : ""} ${store.collector && !store.collectorOpen ? "active" : ""}`}
+        >
           <span className="icon-gem" aria-hidden />
           <div>
-            <b>
+            <button
+              className="help-toggle"
+              aria-expanded={helpOpen[1]}
+              onClick={() => setHelpOpen(([a, b]) => [a, !b])}
+            >
               보석 말풍선 — 수집가 손님
-              {store.collector && !store.collectorOpen && (
-                <em className="live">지금 매장에 있어요! {store.collectorLeft}초 후 떠나요</em>
-              )}
-            </b>
-            <p>
+            </button>
+            {store.collector && !store.collectorOpen && (
+              <em className="live">지금 매장에 있어요! {store.collectorLeft}초 후 떠나요</em>
+            )}
+            <p className="detail">
               약 3분마다 찾아와 진열대에 장착된 피규어를 비싸게 사겠다고 제안해요. 팔면 큰돈을 받지만 그 피규어의 매출
               효과는 사라져요. 30초 안에 누르지 않으면 떠나고, 거절해도 불이익은 없어요.
             </p>

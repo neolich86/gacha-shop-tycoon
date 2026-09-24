@@ -1066,3 +1066,60 @@ button {
     display: none;
   }
 }
+
+/* 손님 안내 토글 (모바일에서만 접힘) */
+.help-toggle {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: default;
+}
+.help .help-row {
+  align-items: center;
+}
+@media (max-width: 560px) {
+  .help {
+    gap: 4px;
+  }
+  .help .help-row {
+    padding: 6px 10px;
+  }
+  .help-toggle {
+    cursor: pointer;
+    position: relative;
+    padding-right: 20px;
+    min-height: 26px;
+  }
+  .help-toggle::after {
+    content: "▾";
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    transition: transform 0.15s;
+  }
+  .help-row.open .help-toggle::after {
+    transform: translateY(-50%) rotate(180deg);
+  }
+  .help-row .detail {
+    display: none;
+  }
+  .help-row.open .detail {
+    display: block;
+  }
+  .help-row .icon-bang,
+  .help-row .icon-gem {
+    width: 24px;
+    height: 22px;
+    font-size: 14px;
+  }
+}
+.help .help-row.open {
+  align-items: start;
+}
