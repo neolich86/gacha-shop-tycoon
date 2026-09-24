@@ -774,3 +774,77 @@ button {
     display: none;
   }
 }
+
+/* 손님 안내 · 수집가 설명 */
+.help {
+  background: var(--panel-2);
+  border: 2px solid var(--line);
+  padding: 10px 12px;
+  margin: 0 0 16px;
+}
+.help h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+.help-row {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 10px;
+  align-items: start;
+  margin-bottom: 10px;
+}
+.help-row p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #cfc6ea;
+}
+.help-row .note {
+  margin-top: 4px;
+}
+.icon-bang,
+.icon-gem {
+  width: 28px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--line);
+  font-family: var(--pixel);
+  font-weight: 700;
+  font-size: 16px;
+}
+.icon-bang {
+  background: #fff;
+  color: #e85d5d;
+}
+.icon-gem {
+  background: #ffd23f;
+  position: relative;
+}
+.icon-gem::after {
+  content: "";
+  width: 12px;
+  height: 12px;
+  background: linear-gradient(135deg, #bff4ff, #5fd4ff 50%, #2f8fd0);
+  transform: rotate(45deg);
+  border: 1px solid var(--line);
+}
+.collector-intro {
+  text-align: left;
+  font-size: 13px !important;
+  background: var(--panel-2);
+  border: 2px solid var(--line);
+  padding: 8px 10px;
+}
+.collector .quote {
+  color: var(--text) !important;
+}
+.verdict {
+  font-size: 13px !important;
+  color: var(--text) !important;
+  background: #2b2340;
+  border: 2px solid var(--line);
+  padding: 6px 10px;
+}
+.verdict b {
+  color: var(--gold);
+}

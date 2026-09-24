@@ -14,6 +14,7 @@ import {
   figMult,
   seriesComplete,
   shelfIncome,
+  incomePerSec,
 } from "@/lib/economy";
 import { FIGURES, SERIES, RARITY_NAMES, RARITY_COLORS, RARITY_WEIGHTS, FIGURE_COUNT } from "@/lib/figures";
 import { fmt } from "@/lib/format";
@@ -214,11 +215,28 @@ export function CollectorModal({ s, offer }: { s: GameState; offer: CollectorOff
   const f = FIGURES[offer.figId];
   const still = s.figs[offer.shelf]?.[offer.slot] === offer.figId;
   const loss = figBonus(s, offer.figId);
+  // 이 피규어가 벌어주는 초당 금액과, 제안가를 벌려면 걸리는 시간
+  const base = shelfIncome(s, offer.shelf) / figMult(s, offer.shelf);
+  const perSec = base * loss;
+  const payback = perSec > 0 ? offer.price / perSec : Infinity;
+  const share = incomePerSec(s) > 0 ? (perSec / incomePerSec(s)) * 100 : 0;
+  const dur =
+    payback === Infinity
+      ? "-"
+      : payback >= 86400
+        ? `${(payback / 86400).toFixed(1)}일`
+        : payback >= 3600
+          ? `${(payback / 3600).toFixed(1)}시간`
+          : `${Math.max(1, Math.round(payback / 60))}분`;
   return (
     <div className="modal" role="dialog" aria-modal="true">
       <div className="box collector">
         <h2>수집가 손님</h2>
-        <p>
+        <p className="collector-intro">
+          보석 말풍선을 단 손님은 희귀 피규어를 찾아다니는 <b>수집가</b>예요. 진열된 피규어를 시세보다 비싸게
+          사 가지만, 팔면 그 피규어의 매출 효과는 사라져요.
+        </p>
+        <p className="quote">
           &ldquo;{SHELVES[offer.shelf].name}에 있는 그 피규어&hellip; 저한테 파시겠어요?&rdquo;
         </p>
         <div className="offer">
@@ -228,6 +246,9 @@ export function CollectorModal({ s, offer }: { s: GameState; offer: CollectorOff
               <RarityTag r={f.rarity} /> {f.name}
             </div>
             <div className="sub">
+              지금 이 피규어 덕분에 초당 +{fmt(perSec)}원 (전체 매출의 {share < 0.1 ? "0.1% 미만" : `${share.toFixed(1)}%`})
+            </div>
+            <div className="sub">
               판매하면 {SHELVES[offer.shelf].name} 피규어 효과 -{Math.round(loss * 100)}%
             </div>
           </div>
@@ -235,6 +256,10 @@ export function CollectorModal({ s, offer }: { s: GameState; offer: CollectorOff
         <div className="reward">
           <span className="coin" aria-hidden />+{fmt(offer.price)}원
         </div>
+        <p className="verdict">
+          이 피규어가 제안가만큼 벌려면 <b>약 {dur}</b> 걸려요. 받은 돈이면 박스를{" "}
+          <b>약 {fmt(Math.floor(offer.price / boxCost(s)))}개</b> 열 수 있어요.
+        </p>
         {!still && <p className="warn">이미 진열대에서 빠진 피규어라 거래할 수 없어요.</p>}
         <div className="actions">
           <button className="primary" disabled={!still} onClick={() => store.answerCollector(true)}>

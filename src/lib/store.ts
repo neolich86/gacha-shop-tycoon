@@ -46,6 +46,7 @@ class GameStore {
   collector: CollectorOffer | null = null;
   collectorOpen = false;
   private collectorUntil = 0;
+  collectorLeft = 0; // 수집가가 떠나기까지 남은 초
   private nextCollectorAt = 0;
 
   subscribe = (l: () => void) => {
@@ -146,6 +147,7 @@ class GameStore {
   private updateCollector() {
     const now = Date.now();
     if (this.collector) {
+      this.collectorLeft = Math.max(0, Math.ceil((this.collectorUntil - now) / 1000));
       if (!this.collectorOpen && now > this.collectorUntil) {
         this.collector = null;
         this.nextCollectorAt = now + this.gap();
@@ -160,6 +162,7 @@ class GameStore {
     }
     this.collector = offer;
     this.collectorUntil = now + COLLECTOR_STAY_MS;
+    this.collectorLeft = COLLECTOR_STAY_MS / 1000;
   }
 
   private gap() {

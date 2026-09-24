@@ -60,7 +60,8 @@ export const FIG_SLOTS = 5;
 export const BOX_SECONDS = 30; // 박스 가격 = 초당 매출 × 30초
 export const BOX_MIN_COST = 100;
 export const SELL_SECONDS = [5, 15, 45, 150, 500]; // 중복·약한 피규어 자동 판매가 (초당 매출 × 초)
-export const COLLECTOR_SECONDS = [300, 600, 1200, 3000, 9000]; // 수집가 제안가
+export const COLLECTOR_SECONDS = [300, 600, 1200, 3000, 9000]; // 수집가 기본 제안가 (초당 매출 × 초)
+export const COLLECTOR_HOURS = 2; // 피규어 기여분 기준 제안가 (약 2시간치, ±30%)
 export const SERIES_COMPLETE_MULT = 1.5; // 시리즈 완성 시 그 시리즈 피규어 효과 ×1.5
 
 export const PRESTIGE_DIVISOR = 1e9;
@@ -308,7 +309,11 @@ export function makeCollectorOffer(s: GameState, rnd: () => number = Math.random
   s.figs.forEach((slots, shelf) => slots.forEach((figId, slot) => all.push({ shelf, slot, figId })));
   if (!all.length) return null;
   const pick = all[Math.floor(rnd() * all.length)];
-  const price = Math.max(100, Math.round(incomePerSec(s) * COLLECTOR_SECONDS[FIGURES[pick.figId].rarity]));
+  // 제안가 = max(등급별 기본가, 그 피규어가 약 1.6~2.8시간 동안 벌어줄 돈)
+  const contribution = (shelfIncome(s, pick.shelf) / figMult(s, pick.shelf)) * figBonus(s, pick.figId);
+  const byContribution = contribution * COLLECTOR_HOURS * 3600 * (0.8 + rnd() * 0.6);
+  const byRarity = incomePerSec(s) * COLLECTOR_SECONDS[FIGURES[pick.figId].rarity];
+  const price = Math.max(100, Math.round(Math.max(byRarity, byContribution)));
   return { ...pick, price };
 }
 

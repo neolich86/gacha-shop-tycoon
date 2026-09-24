@@ -90,7 +90,7 @@ export default function GameClient() {
         <canvas ref={canvasRef} className="scene" aria-label="매장 화면. 말풍선이 뜬 손님을 누르면 보너스를 받아요." />
         <div className="hint">
           {store.collector && !store.collectorOpen
-            ? "★ 수집가 손님이 왔어요! 눌러서 제안을 들어보세요"
+            ? `◆ 보석 말풍선 = 수집가 손님! 눌러서 매입 제안 확인 (${store.collectorLeft}초 후 떠나요)`
             : `말풍선(!) 손님을 누르면 ${TAP_SECONDS}초치 매출 보너스!`}
         </div>
       </div>
@@ -236,6 +236,29 @@ export default function GameClient() {
                 <small className="note">방문 기록 삭제·시크릿 모드·다른 기기에서는 이어지지 않아요. 카카오 로그인 클라우드 저장은 준비 중이에요.</small>
               </dd>
             </dl>
+            <section className="help">
+              <h3>손님 안내</h3>
+              <div className="help-row">
+                <span className="icon-bang" aria-hidden>!</span>
+                <div>
+                  <b>말풍선(!) 손님</b>
+                  <p>눌러주면 기분 좋게 지갑을 열어요. 초당 매출 {TAP_SECONDS}초치를 바로 받아요.</p>
+                </div>
+              </div>
+              <div className="help-row">
+                <span className="icon-gem" aria-hidden />
+                <div>
+                  <b>보석 말풍선 — 수집가 손님</b>
+                  <p>
+                    약 3분마다 찾아와 진열대에 장착된 피규어 하나를 비싸게 사겠다고 제안해요. 팔면 큰돈을 받지만 그
+                    피규어의 매출 효과는 사라져요. 30초 안에 누르지 않으면 그냥 떠나고, 거절해도 불이익은 없어요.
+                  </p>
+                  <p className="note">
+                    제안가는 그 피규어가 적어도 2시간쯤 벌어줄 만큼이에요. 받은 돈으로 박스를 여러 개 열 수도 있어요.
+                  </p>
+                </div>
+              </div>
+            </section>
             {!confirmReset ? (
               <button className="danger" onClick={() => setConfirmReset(true)}>
                 데이터 초기화
