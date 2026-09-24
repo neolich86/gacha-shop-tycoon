@@ -1,48 +1,6 @@
-// 2등신 캐릭터 도트 스프라이트 (10×15)
-// o 외곽선 · h 머리 · s 피부 · e 눈 · k 볼터치 · c 상의 · a 앞치마 · p 하의 · b 신발 · t 모자
-import { drawMap, type Ctx } from "./pixel";
-
-const HEAD_FRONT = [
-  "..oooooo..",
-  ".ohhhhhho.",
-  "ohhhhhhhho",
-  "ohhhhhhhho",
-  "ohssssssho",
-  "osesssseso",
-  "okssssssko",
-  ".oossssoo.",
-];
-const HEAD_BACK = [
-  "..oooooo..",
-  ".ohhhhhho.",
-  "ohhhhhhhho",
-  "ohhhhhhhho",
-  "ohhhhhhhho",
-  "ohhhhhhhho",
-  "ohhhhhhhho",
-  ".oohhhhoo.",
-];
-
-const BODY = [
-  "..occcco..",
-  ".occcccco.",
-  "osccccccso",
-  "osccccccso",
-];
-const BODY_APRON = [
-  "..occcco..",
-  ".ocaaaaco.",
-  "osaaaaaaso",
-  "osaaaaaaso",
-];
-
-const LEGS = [
-  [".oppppppo.", "..op..po..", "..ob..bo.."], // 서기
-  [".oppppppo.", "..op..po..", ".ob...bo.."], // 걷기 1
-  [".oppppppo.", "..op..po..", "..ob...bo."], // 걷기 2
-];
-
-const HAT = ["...tttt...", "..tttttt.."];
+// 2등신 캐릭터 — 고해상도 도트 (20×29칸 + 자동 외곽선, 논리 11×15.5px)
+// 모양을 코드로 조립한 뒤 외곽선을 자동으로 두르고, 외형·방향·프레임별로 캐시한다.
+import { R, shade, type Ctx } from "./pixel";
 
 export interface Look {
   hair: string;
@@ -56,33 +14,162 @@ export interface Look {
 
 export const OUTLINE = "#2a1e2e";
 
-export function drawChar(c: Ctx, look: Look, x: number, y: number, facing: "front" | "back", frame: 0 | 1 | 2, flip = false) {
-  // x,y = 발 중앙 좌표
-  const left = Math.round(x - 5);
-  const top = Math.round(y - 15);
-  const pal: Record<string, string> = {
-    o: OUTLINE,
-    h: look.hair,
-    s: look.skin,
-    e: "#2a1e2e",
-    k: "#f29c9c",
-    c: look.shirt,
-    a: look.apron ?? look.shirt,
-    p: look.pants,
-    b: look.shoes,
-    t: look.hat ?? look.hair,
+const GW = 20; // 내부 칸 너비
+const GH = 29; // 내부 칸 높이
+const PAD = 1;
+
+type Facing = "front" | "back";
+type Frame = 0 | 1 | 2;
+
+function buildGrid(look: Look, facing: Facing, frame: Frame): (string | null)[][] {
+  const g: (string | null)[][] = Array.from({ length: GH }, () => Array(GW).fill(null));
+  const set = (x: number, y: number, col: string) => {
+    if (x >= 0 && x < GW && y >= 0 && y < GH) g[y][x] = col;
   };
-  const map = [
-    ...(facing === "front" ? HEAD_FRONT : HEAD_BACK),
-    ...(look.apron && facing === "front" ? BODY_APRON : BODY),
-    ...LEGS[frame],
-  ];
+  const fill = (x0: number, y0: number, x1: number, y1: number, col: string) => {
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(x, y, col);
+  };
+
+  const skinDark = shade(look.skin, -0.12);
+  const hairHi = shade(look.hair, 0.35);
+  const hairDark = shade(look.hair, -0.25);
+  const shirtDark = shade(look.shirt, -0.2);
+
+  // ── 다리·신발 (프레임에 따라 한쪽 발을 든다)
+  const lLift = frame === 1 ? 1 : 0;
+  const rLift = frame === 2 ? 1 : 0;
+  fill(6, 22, 13, 23, look.pants);
+  fill(6, 24, 8, 25 - lLift, look.pants);
+  fill(11, 24, 13, 25 - rLift, look.pants);
+  fill(5, 26 - lLift, 8, 27 - lLift, look.shoes);
+  fill(11, 26 - rLift, 14, 27 - rLift, look.shoes);
+  set(9, 22, shade(look.pants, -0.2));
+  set(10, 22, shade(look.pants, -0.2));
+
+  // ── 몸통·팔
+  fill(6, 15, 13, 21, look.shirt);
+  fill(13, 16, 13, 21, shirtDark);
+  const lHand = frame === 1 ? 19 : frame === 2 ? 21 : 20;
+  const rHand = frame === 2 ? 19 : frame === 1 ? 21 : 20;
+  fill(4, 16, 5, lHand - 1, look.shirt);
+  fill(14, 16, 15, rHand - 1, shirtDark);
+  fill(4, lHand, 5, lHand + 1, look.skin);
+  fill(14, rHand, 15, rHand + 1, skinDark);
+  if (look.apron && facing === "front") {
+    fill(7, 17, 12, 22, look.apron);
+    set(7, 15, look.apron);
+    set(12, 15, look.apron);
+    set(7, 16, look.apron);
+    set(12, 16, look.apron);
+    fill(8, 19, 11, 19, shade(look.apron, 0.3)); // 주머니
+  } else if (facing === "front") {
+    fill(8, 15, 11, 15, shade(look.shirt, 0.3)); // 옷깃
+  }
+
+  // ── 머리 (타원)
+  const cx = 9.5,
+    cy = 7.5,
+    rx = 9.4,
+    ry = 7.6;
+  const inHead = (x: number, y: number) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
+  for (let y = 0; y <= 15; y++)
+    for (let x = 0; x < GW; x++) {
+      if (!inHead(x, y)) continue;
+      set(x, y, look.skin);
+    }
+  // 목 그림자
+  fill(8, 14, 11, 14, skinDark);
+
+  if (facing === "front") {
+    // 앞머리: 들쭉날쭉한 끝
+    const fringe = [7, 7, 6, 7, 8, 7, 6, 5, 6, 7, 7, 6, 5, 6, 7, 8, 7, 6, 7, 7];
+    for (let x = 0; x < GW; x++)
+      for (let y = 0; y <= 15; y++) {
+        if (!inHead(x, y)) continue;
+        const side = (x <= 2 || x >= 17) && y <= 12;
+        if (y < fringe[x] || side) set(x, y, look.hair);
+      }
+    // 머리 광택
+    fill(5, 2, 8, 2, hairHi);
+    fill(4, 3, 5, 3, hairHi);
+    // 눈 (2×3, 하이라이트)
+    for (const ex of [5, 13]) {
+      fill(ex, 9, ex + 1, 11, OUTLINE);
+      set(ex, 9, "#ffffff");
+    }
+    // 볼터치·입
+    fill(3, 12, 4, 12, "#f29c9c");
+    fill(15, 12, 16, 12, "#f29c9c");
+    fill(9, 12, 10, 12, "#b04a4a");
+  } else {
+    for (let y = 0; y <= 15; y++)
+      for (let x = 0; x < GW; x++) if (inHead(x, y) && y <= 13) set(x, y, look.hair);
+    fill(6, 12, 13, 13, hairDark);
+    fill(6, 3, 9, 3, hairHi);
+    fill(5, 4, 6, 4, hairHi);
+  }
+
+  // ── 모자
+  if (look.hat) {
+    for (let y = 0; y <= 4; y++) for (let x = 0; x < GW; x++) if (inHead(x, y)) set(x, y, look.hat);
+    fill(facing === "front" ? 1 : 3, 5, facing === "front" ? 18 : 16, 5, shade(look.hat, -0.25));
+    fill(8, 1, 11, 2, shade(look.hat, 0.35));
+  }
+  return g;
+}
+
+const cache = new Map<string, HTMLCanvasElement>();
+
+function sprite(look: Look, facing: Facing, frame: Frame): HTMLCanvasElement {
+  const key = `${look.hair}${look.skin}${look.shirt}${look.pants}${look.shoes}${look.apron ?? ""}${look.hat ?? ""}|${facing}|${frame}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const g = buildGrid(look, facing, frame);
+  const W = GW + PAD * 2;
+  const H = GH + PAD * 2;
+  const cv = document.createElement("canvas");
+  cv.width = W;
+  cv.height = H;
+  const c = cv.getContext("2d")!;
+  const filled = (x: number, y: number) => x >= 0 && y >= 0 && x < GW && y < GH && g[y][x] !== null;
+  // 자동 외곽선
+  c.fillStyle = OUTLINE;
+  for (let y = -PAD; y < GH + PAD; y++)
+    for (let x = -PAD; x < GW + PAD; x++) {
+      if (filled(x, y)) continue;
+      if (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1)) c.fillRect(x + PAD, y + PAD, 1, 1);
+    }
+  for (let y = 0; y < GH; y++)
+    for (let x = 0; x < GW; x++) {
+      const col = g[y][x];
+      if (!col) continue;
+      c.fillStyle = col;
+      c.fillRect(x + PAD, y + PAD, 1, 1);
+    }
+  cache.set(key, cv);
+  return cv;
+}
+
+/** x,y = 발 중앙(논리 좌표) */
+export function drawChar(c: Ctx, look: Look, x: number, y: number, facing: Facing, frame: Frame, flip = false) {
+  const img = sprite(look, facing, frame);
+  const w = img.width / R;
+  const h = img.height / R;
+  const left = Math.round((x - w / 2) * R) / R;
+  const top = Math.round((y - h + 1.5) * R) / R;
   // 그림자
   c.fillStyle = "rgba(40,20,40,0.28)";
-  c.fillRect(left + 1, Math.round(y) - 1, 8, 2);
-  c.fillRect(left + 2, Math.round(y), 6, 1);
-  drawMap(c, map, pal, left, top, flip);
-  if (look.hat) drawMap(c, HAT, pal, left, top - 1, flip);
+  c.fillRect(Math.round(x * R) / R - 4, Math.round(y * R) / R - 0.5, 8, 1);
+  c.fillRect(Math.round(x * R) / R - 3, Math.round(y * R) / R + 0.5, 6, 0.5);
+  if (flip) {
+    c.save();
+    c.translate(left + w, top);
+    c.scale(-1, 1);
+    c.drawImage(img, 0, 0, w, h);
+    c.restore();
+  } else {
+    c.drawImage(img, left, top, w, h);
+  }
 }
 
 const HAIRS = ["#3b2a20", "#6b4226", "#1f1b24", "#c9853a", "#8c3b3b", "#e8c26a", "#5a5a7a", "#b35c8a"];

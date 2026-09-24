@@ -2,6 +2,8 @@
 import {
   type Ctx,
   drawMap,
+  scale2x,
+  R,
   rect,
   diamond,
   diamondOutline,
@@ -206,6 +208,13 @@ const CAR_PAL: Record<string, string> = {
   o: "#2a1e2e", v: "#9ceaff", r: "#f2b84b", y: "#fff6b0", w: "#e85d5d", g: "#3d3d48", k: "#c8c8c8",
 };
 
+// 모형 맵을 Scale2x로 고해상도화
+const CAPSULE_HI = scale2x(CAPSULE);
+const ROBOT_HI = scale2x(ROBOT);
+const CAR_HI = scale2x(CAR);
+const SWORDSMAN_HI = scale2x(SWORDSMAN);
+const FIGHTER_HI = scale2x(FIGHTER);
+
 const FIG_COLORS = ["#e85d5d", "#4f8fe6", "#5cc27a", "#f2b84b", "#9b6ee8", "#ef7fb4", "#4cc4c4", "#ff914d"];
 
 export class Scene {
@@ -224,8 +233,8 @@ export class Scene {
     private canvas: HTMLCanvasElement,
     private cb: SceneCallbacks,
   ) {
-    canvas.width = W;
-    canvas.height = H;
+    canvas.width = W * R;
+    canvas.height = H * R;
     const c = canvas.getContext("2d");
     if (!c) throw new Error("canvas 2d unsupported");
     this.c = c;
@@ -411,6 +420,8 @@ export class Scene {
   // ───────────────────────── 렌더링
   private draw() {
     const c = this.c;
+    c.setTransform(R, 0, 0, R, 0, 0);
+    c.imageSmoothingEnabled = false;
     rect(c, 0, 0, W, H, "#2b2340");
     // 바깥 배경 점무늬
     c.fillStyle = "#332a4c";
@@ -452,30 +463,40 @@ export class Scene {
     const pl = sp(0, N);
     const pb = sp(N, N);
     const pr = sp(N, 0);
-    for (let x = pl.x; x < pb.x; x++) rect(c, x, pl.y + (x - pl.x) / 2, 1, 5, "#9c6b4a");
-    for (let x = pb.x; x < pr.x; x++) rect(c, x, pb.y - (x - pb.x) / 2, 1, 5, "#7d5238");
+    for (let k = 0; k < (pb.x - pl.x) * R; k++) {
+      rect(c, pl.x + k / R, pl.y + Math.floor(k / 2) / R, 1 / R, 5, "#9c6b4a");
+      rect(c, pl.x + k / R, pl.y + Math.floor(k / 2) / R + 5, 1 / R, 0.5, "#6e4630");
+    }
+    for (let k = 0; k < (pr.x - pb.x) * R; k++) {
+      rect(c, pb.x + k / R, pb.y - Math.floor(k / 2) / R, 1 / R, 5, "#7d5238");
+      rect(c, pb.x + k / R, pb.y - Math.floor(k / 2) / R + 5, 1 / R, 0.5, "#573726");
+    }
   }
 
   private drawWalls() {
     const c = this.c;
     const len = N * 16;
-    // 왼쪽 벽 (gx=0 라인): x = OX - k, 바닥 y = OY + k/2
-    for (let k = 0; k <= len; k++) {
-      const x = OX - k;
-      const b = OY + Math.floor(k / 2);
-      rect(c, x, b - WALL_H, 1, WALL_H, "#efdcc3");
-      rect(c, x, b - 4, 1, 4, "#9c6b4a");
-      rect(c, x, b - WALL_H - 3, 1, 3, "#c9a57a");
-      if (k % 16 === 0) rect(c, x, b - WALL_H, 1, WALL_H - 4, "#e5cfb2");
+    // 왼쪽 벽 (gx=0 라인): x = OX - k, 바닥 y = OY + k/2 — 실제 픽셀 단위로 채움
+    for (let kd = 0; kd <= len * R; kd++) {
+      const x = OX - kd / R - 1 / R;
+      const b = OY + Math.floor(kd / 2) / R;
+      rect(c, x, b - WALL_H, 1 / R, WALL_H, "#efdcc3");
+      rect(c, x, b - 4, 1 / R, 4, "#9c6b4a");
+      rect(c, x, b - 4, 1 / R, 0.5, "#b8845f");
+      rect(c, x, b - WALL_H - 3, 1 / R, 3, "#c9a57a");
+      rect(c, x, b - WALL_H - 3, 1 / R, 0.5, "#e3c49b");
+      if (kd % (16 * R) === 0) rect(c, x, b - WALL_H, 1 / R, WALL_H - 4, "#e2cbad");
     }
     // 오른쪽 벽 (gy=0 라인)
-    for (let k = 0; k <= len; k++) {
-      const x = OX + k;
-      const b = OY + Math.floor(k / 2);
-      rect(c, x, b - WALL_H, 1, WALL_H, "#f6ead7");
-      rect(c, x, b - 4, 1, 4, "#8a5a3c");
-      rect(c, x, b - WALL_H - 3, 1, 3, "#d9b88c");
-      if (k % 16 === 0) rect(c, x, b - WALL_H, 1, WALL_H - 4, "#eedfc8");
+    for (let kd = 0; kd <= len * R; kd++) {
+      const x = OX + kd / R;
+      const b = OY + Math.floor(kd / 2) / R;
+      rect(c, x, b - WALL_H, 1 / R, WALL_H, "#f6ead7");
+      rect(c, x, b - 4, 1 / R, 4, "#8a5a3c");
+      rect(c, x, b - 4, 1 / R, 0.5, "#a8744f");
+      rect(c, x, b - WALL_H - 3, 1 / R, 3, "#d9b88c");
+      rect(c, x, b - WALL_H - 3, 1 / R, 0.5, "#f0d6ad");
+      if (kd % (16 * R) === 0) rect(c, x, b - WALL_H, 1 / R, WALL_H - 4, "#ecdcc4");
     }
     // 창문 (오른쪽 벽 끝쪽)
     this.wallPatchR(118, 140, 10, 30, "#7d5238");
@@ -491,27 +512,28 @@ export class Scene {
     this.wallPatchL(120, 132, 20, 28, "#fff4f8");
     this.wallPatchL(124, 128, 14, 18, "#9b6ee8");
     // 간판
-    const sx = OX - 26;
-    rect(c, sx - 1, 1, 54, 15, OUTLINE);
-    rect(c, sx, 2, 52, 13, "#e85d5d");
-    rect(c, sx, 2, 52, 2, "#ff8a80");
-    rect(c, OX - 12, 16, 1, 4, OUTLINE);
-    rect(c, OX + 12, 16, 1, 4, OUTLINE);
-    c.font = "10px Galmuri9, monospace";
+    const sx = OX - 28;
+    rect(c, sx - 1, 0, 58, 17, OUTLINE);
+    rect(c, sx, 1, 56, 15, "#e85d5d");
+    rect(c, sx, 1, 56, 1.5, "#ff8a80");
+    rect(c, sx, 14.5, 56, 1.5, "#b83a3a");
+    rect(c, OX - 14, 17, 1, 3, OUTLINE);
+    rect(c, OX + 13, 17, 1, 3, OUTLINE);
+    c.font = "bold 12px Galmuri11, monospace";
     c.textAlign = "center";
     c.textBaseline = "top";
     c.fillStyle = "#7a1f2e";
-    c.fillText("가챠샵", OX + 1, 4);
+    c.fillText("가챠샵", OX + 0.5, 3);
     c.fillStyle = "#fff4e0";
-    c.fillText("가챠샵", OX, 3);
+    c.fillText("가챠샵", OX, 2.5);
   }
 
   /** 오른쪽 벽 위 사각 패치: k 범위, 바닥으로부터 높이 v 범위 */
   private wallPatchR(k0: number, k1: number, v0: number, v1: number, col: string) {
-    for (let k = k0; k < k1; k++) rect(this.c, OX + k, OY + Math.floor(k / 2) - v1, 1, v1 - v0, col);
+    for (let kd = k0 * R; kd < k1 * R; kd++) rect(this.c, OX + kd / R, OY + Math.floor(kd / 2) / R - v1, 1 / R, v1 - v0, col);
   }
   private wallPatchL(k0: number, k1: number, v0: number, v1: number, col: string) {
-    for (let k = k0; k < k1; k++) rect(this.c, OX - k, OY + Math.floor(k / 2) - v1, 1, v1 - v0, col);
+    for (let kd = k0 * R; kd < k1 * R; kd++) rect(this.c, OX - kd / R - 1 / R, OY + Math.floor(kd / 2) / R - v1, 1 / R, v1 - v0, col);
   }
 
   private drawShelf(i: number, gx: number, gy: number) {
@@ -561,7 +583,7 @@ export class Scene {
         // 대형 캡슐 모형 (살짝 통통 튐)
         const hop = Math.floor(this.t * 2) % 2;
         rect(c, cx - 1, cy - 11, 2, 3, "#8a2e2e");
-        drawMap(c, CAPSULE, CAPSULE_PAL, cx - 6, cy - 22 - hop);
+        drawMap(c, CAPSULE_HI, CAPSULE_PAL, cx - 6, cy - 22 - hop, false, 1 / R);
         if (Math.floor(this.t * 3) % 3 === 0) rect(c, cx + 7, cy - 23 - hop, 1, 1, "#fff");
         break;
       }
@@ -586,7 +608,7 @@ export class Scene {
         const ty = p.y - h + 8;
         rect(c, p.x - 7, ty + 1, 14, 3, "#3e4a66");
         rect(c, p.x - 7, ty + 1, 14, 1, "#b6c3e0");
-        drawMap(c, ROBOT, ROBOT_PAL, p.x - 5, ty - 16);
+        drawMap(c, ROBOT_HI, ROBOT_PAL, p.x - 5, ty - 16, false, 1 / R);
         if (Math.floor(this.t * 2) % 2) rect(c, p.x - 3, ty - 12, 1, 1, "#fff");
         break;
       }
@@ -609,7 +631,7 @@ export class Scene {
         // 윗면: 자동차 모형
         const ty = p.y - h + 8;
         rect(c, p.x - 9, ty + 2, 18, 2, "#b9a88e");
-        drawMap(c, CAR, CAR_PAL, p.x - 8, ty - 6);
+        drawMap(c, CAR_HI, CAR_PAL, p.x - 8, ty - 6, false, 1 / R);
         break;
       }
       case 3: {
@@ -642,7 +664,7 @@ export class Scene {
           const ty = p.y - h + 8;
           rect(c, p.x - 8, ty + 1, 16, 3, "#5a3a26");
           rect(c, p.x - 8, ty + 1, 16, 1, "#b07a52");
-          drawMap(c, SWORDSMAN, SWORDSMAN_PAL, p.x - 8, ty - 16);
+          drawMap(c, SWORDSMAN_HI, SWORDSMAN_PAL, p.x - 8, ty - 16, false, 1 / R);
           const ph = Math.floor(this.t * 4) % 4;
           if (ph < 2) {
             const arc: [number, number][] = [[12, -18], [15, -17], [17, -15], [18, -12], [18, -9], [17, -6]];
@@ -674,7 +696,7 @@ export class Scene {
           c.fillStyle = aura === 0 ? "#ffe066" : aura === 1 ? "#fff6b0" : "#ffd23f";
           for (const [ax, ay] of [[1, 2], [12, 3], [0, 9], [13, 10], [3, -1], [10, -1]] as [number, number][])
             c.fillRect(fx + ax, fy + ay - (aura % 2), 1, 2);
-          drawMap(c, FIGHTER, FIGHTER_PAL, fx, fy);
+          drawMap(c, FIGHTER_HI, FIGHTER_PAL, fx, fy, false, 1 / R);
           if (aura === 0) rect(c, fx + 15, fy + 7, 2, 2, "#fff");
         }
         break;

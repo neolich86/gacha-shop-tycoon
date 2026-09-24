@@ -229,7 +229,11 @@ export default function GameClient() {
                 최대 {OFFLINE_BASE.capSec / 3600}시간 · 효율 {OFFLINE_BASE.efficiency * 100}%
               </dd>
               <dt>저장</dt>
-              <dd>이 기기에 자동 저장 (로그인·클라우드 저장은 준비 중)</dd>
+              <dd>
+                이 브라우저에 10초마다 자동 저장돼요. 브라우저를 껐다 켜도 이어서 할 수 있어요.
+                <br />
+                <small className="note">방문 기록 삭제·시크릿 모드·다른 기기에서는 이어지지 않아요. 카카오 로그인 클라우드 저장은 준비 중이에요.</small>
+              </dd>
             </dl>
             {!confirmReset ? (
               <button className="danger" onClick={() => setConfirmReset(true)}>

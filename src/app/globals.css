@@ -26,6 +26,9 @@
   --gold: #ffd23f;
   --accent: #e85d5d;
   --ok: #5cc27a;
+  /* 도트 폰트는 설계 크기(12/24px)에서만 선명하므로 큰 숫자·제목에만 쓰고, 본문은 가독성 좋은 고딕 */
+  --pixel: "Galmuri11", monospace;
+  --sans: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
 }
 
 * {
@@ -36,8 +39,9 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: "Galmuri11", "Noto Sans KR", system-ui, sans-serif;
-  -webkit-font-smoothing: none;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.4;
   -webkit-tap-highlight-color: transparent;
 }
 button {
@@ -91,6 +95,7 @@ button {
 .hud .title {
   grid-area: title;
   color: var(--muted);
+  font-family: var(--pixel);
   font-size: 12px;
 }
 .hud .gold {
@@ -98,17 +103,22 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 26px;
+  font-family: var(--pixel);
+  font-weight: 700;
+  font-size: 24px;
   color: var(--gold);
   text-shadow: 2px 2px 0 var(--line);
 }
 .hud .gold small {
-  font-size: 14px;
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 15px;
   color: var(--text);
 }
 .hud .rate {
   grid-area: rate;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--ok);
 }
 
@@ -141,10 +151,9 @@ button {
   left: 6px;
   bottom: 6px;
   line-height: 1.2;
-  font-size: 11px;
-  font-family: "Galmuri9", "Galmuri11", sans-serif;
-  color: var(--muted);
-  background: rgba(27, 21, 40, 0.7);
+  font-size: 12px;
+  color: #e6e0f5;
+  background: rgba(27, 21, 40, 0.75);
   padding: 2px 6px;
   pointer-events: none;
 }
@@ -156,8 +165,9 @@ button {
 }
 .tabs button {
   background: var(--panel);
-  padding: 8px 0;
-  font-size: 14px;
+  padding: 9px 0;
+  font-size: 15px;
+  font-weight: 700;
 }
 .tabs button.on {
   background: var(--accent);
@@ -178,8 +188,9 @@ button {
 }
 .modes button {
   background: var(--panel-2);
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 700;
 }
 .modes button.on {
   background: var(--gold);
@@ -216,7 +227,8 @@ button {
   display: grid;
   place-items: center;
   border: 2px solid var(--line);
-  font-size: 16px;
+  font-family: var(--pixel);
+  font-size: 12px;
   color: var(--line);
   font-weight: 700;
   box-shadow: inset -3px -3px 0 rgba(0, 0, 0, 0.25), inset 3px 3px 0 rgba(255, 255, 255, 0.35);
@@ -228,7 +240,8 @@ button {
   min-width: 0;
 }
 .name {
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 700;
   display: flex;
   flex-wrap: wrap;
   gap: 4px 6px;
@@ -240,18 +253,19 @@ button {
 }
 .mult {
   font-size: 11px;
+  font-weight: 700;
   color: var(--line);
   background: var(--ok);
   padding: 0 4px;
 }
 .sub {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: 13px;
+  color: #cfc6ea;
   margin-top: 2px;
 }
 .bar {
   position: relative;
-  height: 12px;
+  height: 15px;
   margin-top: 4px;
   background: var(--line);
   max-width: 220px;
@@ -264,9 +278,9 @@ button {
 .bar span {
   position: absolute;
   inset: 0;
-  font-size: 10px;
-  line-height: 12px;
-  font-family: "Galmuri9", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 15px;
   text-align: center;
   color: #fff;
 }
@@ -282,14 +296,15 @@ button {
   line-height: 1.25;
 }
 .buy span {
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 700;
 }
 .buy b {
-  font-size: 14px;
+  font-size: 15px;
 }
 .buy small {
-  font-size: 10px;
-  opacity: 0.8;
+  font-size: 11px;
+  opacity: 0.85;
 }
 .buy:disabled {
   background: #5d547a;
@@ -321,8 +336,8 @@ button {
 .settings dl {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 6px 12px;
-  font-size: 13px;
+  gap: 8px 14px;
+  font-size: 14px;
   margin: 0 0 16px;
 }
 .settings dt {
@@ -365,12 +380,13 @@ button {
 }
 .modal h2 {
   margin: 0 0 8px;
-  font-size: 18px;
+  font-family: var(--pixel);
+  font-size: 24px;
   color: var(--gold);
 }
 .modal p {
-  font-size: 13px;
-  color: var(--muted);
+  font-size: 14px;
+  color: #cfc6ea;
   line-height: 1.6;
   margin: 0 0 12px;
 }
@@ -379,6 +395,8 @@ button {
   justify-content: center;
   align-items: center;
   gap: 8px;
+  font-family: var(--pixel);
+  font-weight: 700;
   font-size: 24px;
   color: var(--gold);
   text-shadow: 2px 2px 0 var(--line);
@@ -420,4 +438,10 @@ button {
   .buy {
     min-width: 92px;
   }
+}
+.settings .note {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
 }
