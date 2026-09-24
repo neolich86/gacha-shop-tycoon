@@ -1,6 +1,7 @@
 // 45도 탑뷰(쿼터뷰) 도트 매장 씬
 import {
   type Ctx,
+  drawMap,
   rect,
   diamond,
   diamondOutline,
@@ -97,6 +98,47 @@ function seeded(seed: number) {
   if (s <= 0) s += 2147483646;
   return () => (s = (s * 16807) % 2147483647) / 2147483647;
 }
+
+// 캡슐토이 머신 위 간판에 번갈아 표시되는 라인업 (자유롭게 수정 가능)
+export const CAPSULE_LABELS = ["해적왕", "몬스터", "닌자", "마법소녀", "공룡", "용사"];
+
+// 프라모델 코너 위 로봇 모형
+const ROBOT = [
+  ".....y.....",
+  "....yoy....",
+  "...ooooo...",
+  "..owwwwwo..",
+  "..ovvvvvo..",
+  "..owwrwwo..",
+  "oooowwwoooo",
+  "obbowbwobbo",
+  "obbowwwobbo",
+  "ogg.ooo.ggo",
+  "oo.obbbo.oo",
+  "...orrro...",
+  "..owwowwo..",
+  "..owo.owo..",
+  "..owo.owo..",
+  "..obo.obo..",
+  ".oooo.oooo.",
+];
+const ROBOT_PAL: Record<string, string> = {
+  o: "#2a1e2e", y: "#ffd23f", w: "#f4f4f8", v: "#5fe0ff", r: "#e85d5d", b: "#4f7fe6", g: "#9aa0b4",
+};
+// 미니피규어 선반 위 자동차 모형
+const CAR = [
+  ".....oooooo.....",
+  "....ovvovvvo....",
+  "..oorrrrrrrrooo.",
+  ".orrrrrrrrrrrrro",
+  "oyrrrrrrrrrrrrwo",
+  "ooogggoooooggooo",
+  "..ogkgo...ogkgo.",
+  "...ooo.....ooo..",
+];
+const CAR_PAL: Record<string, string> = {
+  o: "#2a1e2e", v: "#9ceaff", r: "#f2b84b", y: "#fff6b0", w: "#e85d5d", g: "#3d3d48", k: "#c8c8c8",
+};
 
 const FIG_COLORS = ["#e85d5d", "#4f8fe6", "#5cc27a", "#f2b84b", "#9b6ee8", "#ef7fb4", "#4cc4c4", "#ff914d"];
 
@@ -450,6 +492,20 @@ export class Scene {
         }
         rect(c, cx - 4, cy - 7, 2, 2, "#ffffff");
         rect(c, cx - 8, cy, 16, 1, "#8a2e2e");
+        // 라인업 간판 (2.5초마다 교체)
+        const label = CAPSULE_LABELS[Math.floor(this.t / 2.5) % CAPSULE_LABELS.length];
+        c.font = "10px Galmuri9, monospace";
+        const tw = Math.ceil(c.measureText(label).width);
+        const sw = tw + 6;
+        const sy = cy - 24;
+        rect(c, cx - 1, sy + 12, 2, 4, OUTLINE);
+        rect(c, cx - Math.ceil(sw / 2) - 1, sy - 1, sw + 2, 14, OUTLINE);
+        rect(c, cx - Math.ceil(sw / 2), sy, sw, 12, "#fff4e0");
+        rect(c, cx - Math.ceil(sw / 2), sy, sw, 2, "#ffd23f");
+        c.textAlign = "center";
+        c.textBaseline = "top";
+        c.fillStyle = "#b83a3a";
+        c.fillText(label, cx, sy + 1);
         break;
       }
       case 1: {
@@ -469,6 +525,12 @@ export class Scene {
             rect(c, q.x, q.y - 6, 3, 1, shade(col, 0.35));
           }
         }
+        // 윗면: 받침대 + 로봇 모형
+        const ty = p.y - h + 8;
+        rect(c, p.x - 7, ty + 1, 14, 3, "#3e4a66");
+        rect(c, p.x - 7, ty + 1, 14, 1, "#b6c3e0");
+        drawMap(c, ROBOT, ROBOT_PAL, p.x - 5, ty - 16);
+        if (Math.floor(this.t * 2) % 2) rect(c, p.x - 3, ty - 12, 1, 1, "#fff");
         break;
       }
       case 2: {
@@ -487,6 +549,10 @@ export class Scene {
             rect(c, q.x, q.y - 5, 2, 2, "#ffd9b8");
           }
         }
+        // 윗면: 자동차 모형
+        const ty = p.y - h + 8;
+        rect(c, p.x - 9, ty + 2, 18, 2, "#b9a88e");
+        drawMap(c, CAR, CAR_PAL, p.x - 8, ty - 6);
         break;
       }
       case 3: {
