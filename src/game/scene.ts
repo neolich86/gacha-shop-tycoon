@@ -99,8 +99,74 @@ function seeded(seed: number) {
   return () => (s = (s * 16807) % 2147483647) / 2147483647;
 }
 
-// 캡슐토이 머신 위 간판에 번갈아 표시되는 라인업 (자유롭게 수정 가능)
-export const CAPSULE_LABELS = ["해적왕", "몬스터", "닌자", "마법소녀", "공룡", "용사"];
+// 캡슐토이 머신 위 대형 캡슐 모형
+const CAPSULE = [
+  "...oooooo...",
+  "..orrrrrro..",
+  ".oqqrrrrrro.",
+  ".oqrrmmrrro.",
+  "orrrmmmrrrro",
+  "ollllllllllo",
+  "owwwwwwwwwwo",
+  "owwwwwwwwggo",
+  ".owwwwwwwgo.",
+  ".owwwwwwggo.",
+  "..oggggggo..",
+  "...oooooo...",
+];
+// 투명 뚜껑(안에 장난감) + 노란 몸통
+const CAPSULE_PAL: Record<string, string> = {
+  o: "#2a1e2e", r: "#bfeaff", q: "#ffffff", m: "#9b6ee8", l: "#e0a520", w: "#ffd23f", g: "#e0a520",
+};
+
+// 스케일 피규어 장 위 — 칼을 휘두르는 검객 (오리지널 디자인)
+const SWORDSMAN = [
+  "................ob..",
+  "...............obo..",
+  "..............obo...",
+  "....ooo......obo....",
+  "...ohhhoo...obo.....",
+  "..ohhhhhho.obo......",
+  "..ohssssho.ko.......",
+  "..osesssso.ogo......",
+  "...ossso..osso......",
+  "..orrrrrosso........",
+  ".onrrnnnnoo.........",
+  ".onnnwnnno..........",
+  "..onnwnnno..........",
+  "..oppppppo..........",
+  ".opppoppppo.........",
+  ".oppo..oppo.........",
+  ".offo...offo........",
+  ".ooo.....ooo........",
+];
+const SWORDSMAN_PAL: Record<string, string> = {
+  o: "#2a1e2e", h: "#3a2a4a", s: "#ffd9b8", e: "#2a1e2e", n: "#2f3f6b", w: "#f4f4f8",
+  r: "#d94848", p: "#4a3b32", f: "#1f1b24", b: "#dfe8f2", g: "#c98a1a", k: "#ffd23f",
+};
+
+// 쿠지 부스 위 — 주먹을 내지르는 무도가 (오리지널 디자인)
+const FIGHTER = [
+  "....oooooo....",
+  "...ohhhhhho...",
+  "...orrrrrrrorr",
+  "...ohssssho..r",
+  "...osesseso...",
+  "....osssso....",
+  "..oowwwwwwoo..",
+  ".owwwwkwwwwsso",
+  ".oswwkwwwwoooo",
+  "..oswwwwwo....",
+  "...obbbbbo....",
+  "...owwowwo....",
+  "..owwo.owwo...",
+  ".owwo...owwo..",
+  ".oso.....oso..",
+  ".ooo.....ooo..",
+];
+const FIGHTER_PAL: Record<string, string> = {
+  o: "#2a1e2e", h: "#6b4226", r: "#e85d5d", s: "#f5c49c", e: "#2a1e2e", w: "#f4f4f8", k: "#cfd8e6", b: "#2a1e2e",
+};
 
 // 프라모델 코너 위 로봇 모형
 const ROBOT = [
@@ -492,20 +558,11 @@ export class Scene {
         }
         rect(c, cx - 4, cy - 7, 2, 2, "#ffffff");
         rect(c, cx - 8, cy, 16, 1, "#8a2e2e");
-        // 라인업 간판 (2.5초마다 교체)
-        const label = CAPSULE_LABELS[Math.floor(this.t / 2.5) % CAPSULE_LABELS.length];
-        c.font = "10px Galmuri9, monospace";
-        const tw = Math.ceil(c.measureText(label).width);
-        const sw = tw + 6;
-        const sy = cy - 24;
-        rect(c, cx - 1, sy + 12, 2, 4, OUTLINE);
-        rect(c, cx - Math.ceil(sw / 2) - 1, sy - 1, sw + 2, 14, OUTLINE);
-        rect(c, cx - Math.ceil(sw / 2), sy, sw, 12, "#fff4e0");
-        rect(c, cx - Math.ceil(sw / 2), sy, sw, 2, "#ffd23f");
-        c.textAlign = "center";
-        c.textBaseline = "top";
-        c.fillStyle = "#b83a3a";
-        c.fillText(label, cx, sy + 1);
+        // 대형 캡슐 모형 (살짝 통통 튐)
+        const hop = Math.floor(this.t * 2) % 2;
+        rect(c, cx - 1, cy - 11, 2, 3, "#8a2e2e");
+        drawMap(c, CAPSULE, CAPSULE_PAL, cx - 6, cy - 22 - hop);
+        if (Math.floor(this.t * 3) % 3 === 0) rect(c, cx + 7, cy - 23 - hop, 1, 1, "#fff");
         break;
       }
       case 1: {
@@ -580,25 +637,46 @@ export class Scene {
           const q = rightFacePt(p.x, p.y, 13 - Math.floor(v / 4), v);
           rect(c, q.x, q.y, 1, 1, "rgba(255,255,255,0.7)");
         }
+        // 윗면: 받침대 + 검객 모형, 베기 궤적
+        {
+          const ty = p.y - h + 8;
+          rect(c, p.x - 8, ty + 1, 16, 3, "#5a3a26");
+          rect(c, p.x - 8, ty + 1, 16, 1, "#b07a52");
+          drawMap(c, SWORDSMAN, SWORDSMAN_PAL, p.x - 8, ty - 16);
+          const ph = Math.floor(this.t * 4) % 4;
+          if (ph < 2) {
+            const arc: [number, number][] = [[12, -18], [15, -17], [17, -15], [18, -12], [18, -9], [17, -6]];
+            arc.forEach(([ax, ay], k) => {
+              if (ph === 1 && k < 2) return;
+              rect(c, p.x - 8 + ax, ty + ay, 1, 1, k % 2 ? "#bfe8ff" : "#ffffff");
+            });
+          }
+        }
         break;
       }
       case 4: {
         // 쿠지 부스
         isoBox(c, p.x, p.y, 12, "#ffd66b", "#e0ad2e", "#f2c14e");
-        for (let k = 0; k < 4; k++) {
-          const bx = p.x - 8 + k * 4;
-          const by = p.y - 12 + 4 + (k % 2) * 2;
+        // 경품 상자 (왼쪽)
+        for (let k = 0; k < 2; k++) {
+          const bx = p.x - 10 + k * 5;
+          const by = p.y - 12 + 6 + k * 2;
           rect(c, bx, by - 5, 4, 5, FIG_COLORS[(k + 2) % FIG_COLORS.length]);
           rect(c, bx, by - 5, 4, 1, "#fff");
         }
-        rect(c, p.x - 13, p.y - 36, 26, 14, OUTLINE);
-        rect(c, p.x - 12, p.y - 35, 24, 12, "#e85d5d");
-        rect(c, p.x - 1, p.y - 22, 2, 6, OUTLINE);
-        c.font = "10px Galmuri9, monospace";
-        c.textAlign = "center";
-        c.textBaseline = "top";
-        c.fillStyle = "#fff4e0";
-        c.fillText("쿠지", p.x, p.y - 35);
+        // 무도가 모형 + 기합 오라
+        {
+          const ty = p.y - 12 + 8;
+          rect(c, p.x - 3, ty + 1, 14, 2, "#c98a1a");
+          const fx = p.x - 2;
+          const fy = ty - 15;
+          const aura = Math.floor(this.t * 5) % 3;
+          c.fillStyle = aura === 0 ? "#ffe066" : aura === 1 ? "#fff6b0" : "#ffd23f";
+          for (const [ax, ay] of [[1, 2], [12, 3], [0, 9], [13, 10], [3, -1], [10, -1]] as [number, number][])
+            c.fillRect(fx + ax, fy + ay - (aura % 2), 1, 2);
+          drawMap(c, FIGHTER, FIGHTER_PAL, fx, fy);
+          if (aura === 0) rect(c, fx + 15, fy + 7, 2, 2, "#fff");
+        }
         break;
       }
       case 5: {
